@@ -7,8 +7,26 @@ import { Send, MapPin, Loader2 } from "lucide-react";
 type Poi = { name: string; address?: string; city?: string; lat?: number; lng?: number };
 
 async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?: string } }) {
-  const { data } = await axios.post(url, arg);
-  return data as { title: string; description?: string; pois: Poi[] };
+  try {
+    const { data } = await axios.post(url, arg, {
+      timeout: 120000, // 增加到120秒超时
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    return data as { title: string; description?: string; pois: Poi[] };
+  } catch (error) {
+    console.error('AI请求失败:', error);
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('请求超时，请稍后重试');
+      }
+      if (error.response?.status === 500) {
+        throw new Error('服务器错误，请稍后重试');
+      }
+    }
+    throw new Error('AI服务暂时不可用，请稍后重试');
+  }
 }
 
 export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {

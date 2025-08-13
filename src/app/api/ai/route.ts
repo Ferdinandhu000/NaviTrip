@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
         temperature: 0.7,
         max_tokens: 1200,
       }, {
-        timeout: 15000,
+        timeout: 120000, // 增加到120秒超时
       });
       
       const planText = planResponse.choices?.[0]?.message?.content || "";
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
         temperature: 0.3,
         max_tokens: 200,
       }, {
-        timeout: 10000,
+        timeout: 120000, // 增加到120秒超时
       });
       
       const keywordText = keywordResponse.choices?.[0]?.message?.content || "";
