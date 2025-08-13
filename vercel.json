@@ -1,0 +1,19 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["sin1", "hkg1", "nrt1"],
+  "env": {
+    "OPENAI_API_KEY": "@openai_api_key",
+    "OPENAI_BASE_URL": "@openai_base_url",
+    "OPENAI_MODEL": "@openai_model",
+    "NEXT_PUBLIC_AMAP_JS_KEY": "@amap_js_key",
+    "AMAP_WEB_KEY": "@amap_web_key"
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
