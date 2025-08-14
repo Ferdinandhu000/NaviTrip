@@ -50,6 +50,12 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
     setIsLoading(true);
     setMapError(null);
     
+    console.log("🗺️ Map组件 - 初始化地图，markers状态:", { 
+      hasMap: !!map, 
+      markersCount: markers?.length || 0,
+      markers: markers
+    });
+    
     (async () => {
       try {
         if (!mapRef.current || mapInstance.current) return;

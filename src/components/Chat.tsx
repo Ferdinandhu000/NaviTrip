@@ -36,19 +36,39 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
 
   const onSubmit = async () => {
     if (!prompt.trim()) return;
-    const resp = await trigger({ prompt, city: city || undefined });
-    console.log("API返回的POI数据:", resp?.pois);
-    const markers = (resp?.pois || [])
-      .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
-      .map((p, idx) => ({ 
-        id: `${idx}`, 
-        title: p.name, 
-        subtitle: [p.city, p.address].filter(Boolean).join(" · "), 
-        latitude: p.lat as number, 
-        longitude: p.lng as number 
-      }));
-    console.log("转换后的markers数据:", markers);
-    onMarkers(markers);
+    
+    console.log("🚀 开始提交请求:", { prompt, city });
+    
+    try {
+      const resp = await trigger({ prompt, city: city || undefined });
+      console.log("✅ API响应成功:", resp);
+      console.log("📊 API返回的POI数据:", resp?.pois);
+      
+      if (!resp?.pois || !Array.isArray(resp.pois)) {
+        console.error("❌ POI数据格式错误:", resp?.pois);
+        return;
+      }
+      
+      const markers = resp.pois
+        .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
+        .map((p, idx) => ({ 
+          id: `${idx}`, 
+          title: p.name, 
+          subtitle: [p.city, p.address].filter(Boolean).join(" · "), 
+          latitude: p.lat as number, 
+          longitude: p.lng as number 
+        }));
+      
+      console.log("🎯 转换后的markers数据:", markers);
+      console.log("📍 调用onMarkers，传递markers数量:", markers.length);
+      
+      onMarkers(markers);
+      
+      console.log("✅ 数据传递完成");
+      
+    } catch (error) {
+      console.error("❌ 请求失败:", error);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
