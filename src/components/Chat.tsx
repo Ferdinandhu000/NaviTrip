@@ -32,6 +32,7 @@ async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?:
 export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {
   const [prompt, setPrompt] = useState("");
   const [city, setCity] = useState("");
+  const [localData, setLocalData] = useState<any>(null);
   const { trigger, isMutating, data } = useSWRMutation("/api/ai", sendRequest);
 
   const onSubmit = async () => {
@@ -48,6 +49,9 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
         console.error("❌ POI数据格式错误:", resp?.pois);
         return;
       }
+      
+      // 更新本地状态，确保UI重新渲染
+      setLocalData(resp);
       
       const markers = resp.pois
         .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
@@ -83,7 +87,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
       {/* 聊天消息区域 */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
         {/* 用户消息 */}
-        {prompt && data && (
+        {prompt && (localData || data) && (
           <div className="flex justify-end">
             <div className="max-w-[80%] bg-blue-500 text-white rounded-2xl rounded-br-md px-4 py-3">
               <p className="text-sm">{prompt}</p>
@@ -95,28 +99,28 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
         )}
 
         {/* AI回复消息 */}
-        {data && (
+        {(localData || data) && (
           <div className="flex justify-start">
             <div className="max-w-[85%] bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-xs">AI</span>
                 </div>
-                <h3 className="font-semibold text-gray-900 text-sm">{data.title}</h3>
+                <h3 className="font-semibold text-gray-900 text-sm">{(localData || data)?.title}</h3>
               </div>
               
-              {data.description && (
+              {(localData || data)?.description && (
                 <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed mb-3">
-                  {data.description}
+                  {(localData || data)?.description}
                 </div>
               )}
               
-              {data.pois?.length ? (
+              {(localData || data)?.pois?.length ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
                     <MapPin className="w-4 h-4 text-blue-500" />
-                    推荐地点 ({data.pois.length})
-                    {data.pois.length > 1 && (
+                    推荐地点 ({(localData || data)?.pois?.length})
+                    {(localData || data)?.pois?.length > 1 && (
                       <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
                         已规划路线
                       </span>
@@ -124,9 +128,9 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                   </div>
                   
                   <div className="space-y-2">
-                    {data.pois.map((p, i) => {
+                    {(localData || data)?.pois?.map((p: any, i: number) => {
                       const isStart = i === 0;
-                      const isEnd = i === data.pois.length - 1 && data.pois.length > 1;
+                      const isEnd = i === (localData || data)?.pois?.length - 1 && (localData || data)?.pois?.length > 1;
                       
                       return (
                         <div 
@@ -157,7 +161,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                               )}
                             </div>
                           </div>
-                          {i < data.pois.length - 1 && (
+                          {i < (localData || data)?.pois?.length - 1 && (
                             <div className="absolute left-6 bottom-0 w-0.5 h-3 bg-blue-300 transform translate-y-full"></div>
                           )}
                         </div>
@@ -165,7 +169,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                     })}
                   </div>
                   
-                  {data.pois.length > 1 && (
+                  {(localData || data)?.pois?.length > 1 && (
                     <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg mt-2">
                       💡 地图上的蓝色线条显示推荐行程路线，点击标记查看详细信息
                     </div>
