@@ -34,6 +34,11 @@
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
+    "@hw-agconnect/auth": "^1.5.1",
+    "@hw-agconnect/cloudstorage": "^1.5.1",
+    "@hw-agconnect/database": "^1.5.1",
+    "@hw-agconnect/function": "^1.5.1",
+    "@hw-agconnect/remoteconfig": "^1.5.1",
     "axios": "^1.11.0",
     "lucide-react": "^0.539.0",
     "next": "15.4.6",
