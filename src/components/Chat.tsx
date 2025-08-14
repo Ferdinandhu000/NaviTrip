@@ -133,8 +133,8 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
                     <MapPin className="w-4 h-4 text-blue-500" />
-                    推荐地点 ({(localData || data)?.pois?.length})
-                    {(localData || data)?.pois?.length > 1 && (
+                    推荐地点 ({(localData || data)?.pois?.length || 0})
+                    {((localData || data)?.pois?.length || 0) > 1 && (
                       <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
                         已规划路线
                       </span>
@@ -144,7 +144,8 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                   <div className="space-y-2">
                     {(localData || data)?.pois?.map((p: PoiData, i: number) => {
                       const isStart = i === 0;
-                      const isEnd = i === (localData || data)?.pois?.length - 1 && (localData || data)?.pois?.length > 1;
+                      const poisLength = (localData || data)?.pois?.length || 0;
+                      const isEnd = i === poisLength - 1 && poisLength > 1;
                       
                       return (
                         <div 
