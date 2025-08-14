@@ -5,6 +5,10 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# 函数超时配置 - 解决AI API调用超时问题
+[functions]
+  timeout = 30
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -16,3 +20,4 @@
     X-Frame-Options = "DENY"
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
+
