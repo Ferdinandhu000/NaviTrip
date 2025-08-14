@@ -2,9 +2,23 @@
 import { useState } from "react";
 import useSWRMutation from "swr/mutation";
 import axios from "axios";
-import { Send, MapPin, Loader2 } from "lucide-react";
+import { MapPin } from "lucide-react";
 
-type Poi = { name: string; address?: string; city?: string; lat?: number; lng?: number };
+// 定义类型接口
+interface PoiData {
+  name: string;
+  city?: string;
+  address?: string;
+  lat: number;
+  lng: number;
+}
+
+interface AIResponse {
+  title: string;
+  description?: string;
+  pois: PoiData[];
+  error?: string;
+}
 
 async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?: string } }) {
   try {
@@ -14,7 +28,7 @@ async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?:
         'Content-Type': 'application/json',
       }
     });
-    return data as { title: string; description?: string; pois: Poi[] };
+    return data as AIResponse;
   } catch (error) {
     console.error('AI请求失败:', error);
     if (axios.isAxiosError(error)) {
@@ -32,7 +46,7 @@ async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?:
 export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {
   const [prompt, setPrompt] = useState("");
   const [city, setCity] = useState("");
-  const [localData, setLocalData] = useState<any>(null);
+  const [localData, setLocalData] = useState<AIResponse | null>(null);
   const { trigger, isMutating, data } = useSWRMutation("/api/ai", sendRequest);
 
   const onSubmit = async () => {
@@ -128,7 +142,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                   </div>
                   
                   <div className="space-y-2">
-                    {(localData || data)?.pois?.map((p: any, i: number) => {
+                    {(localData || data)?.pois?.map((p: PoiData, i: number) => {
                       const isStart = i === 0;
                       const isEnd = i === (localData || data)?.pois?.length - 1 && (localData || data)?.pois?.length > 1;
                       
@@ -161,7 +175,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                               )}
                             </div>
                           </div>
-                          {i < (localData || data)?.pois?.length - 1 && (
+                          {i < ((localData || data)?.pois?.length || 0) - 1 && (
                             <div className="absolute left-6 bottom-0 w-0.5 h-3 bg-blue-300 transform translate-y-full"></div>
                           )}
                         </div>
@@ -169,7 +183,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                     })}
                   </div>
                   
-                  {(localData || data)?.pois?.length > 1 && (
+                  {((localData || data)?.pois?.length || 0) > 1 && (
                     <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg mt-2">
                       💡 地图上的蓝色线条显示推荐行程路线，点击标记查看详细信息
                     </div>
@@ -257,9 +271,9 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
               className="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
             >
               {isMutating ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-white text-xs">AI</span>
               ) : (
-                <Send className="w-5 h-5" />
+                <span className="text-white text-xs">AI</span>
               )}
             </button>
           </div>
