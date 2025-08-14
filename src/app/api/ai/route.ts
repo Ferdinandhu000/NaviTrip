@@ -60,6 +60,43 @@ function handleAIError(error: unknown): string {
 }
 
 /**
+ * 从用户输入中提取省份或城市信息
+ */
+function extractRegionFromPrompt(prompt: string): string | undefined {
+  // 中国省份列表
+  const provinces = [
+    '北京', '天津', '上海', '重庆', '河北', '山西', '辽宁', '吉林', '黑龙江',
+    '江苏', '浙江', '安徽', '福建', '江西', '山东', '河南', '湖北', '湖南',
+    '广东', '广西', '海南', '四川', '贵州', '云南', '西藏', '陕西', '甘肃',
+    '青海', '宁夏', '新疆', '内蒙古', '台湾', '香港', '澳门'
+  ];
+  
+  // 主要城市列表
+  const cities = [
+    '深圳', '杭州', '南京', '苏州', '成都', '西安', '武汉', '长沙', '郑州',
+    '济南', '青岛', '大连', '沈阳', '哈尔滨', '长春', '石家庄', '太原',
+    '呼和浩特', '南昌', '合肥', '福州', '厦门', '南宁', '海口', '昆明',
+    '贵阳', '拉萨', '兰州', '西宁', '银川', '乌鲁木齐'
+  ];
+  
+  // 先检查省份
+  for (const province of provinces) {
+    if (prompt.includes(province)) {
+      return province;
+    }
+  }
+  
+  // 再检查城市
+  for (const city of cities) {
+    if (prompt.includes(city)) {
+      return city;
+    }
+  }
+  
+  return undefined;
+}
+
+/**
  * 从用户输入中提取基础关键词（AI失败时的降级处理）
  */
 function extractBasicKeywords(prompt: string): string[] {
@@ -99,6 +136,17 @@ export async function POST(req: NextRequest) {
 
     const { prompt, city } = parsed.data;
 
+    // 从用户输入中提取地区信息
+    const extractedRegion = extractRegionFromPrompt(prompt);
+    const searchCity = city || extractedRegion; // 优先使用传入的city参数，否则使用提取的地区
+
+    console.log("地区信息:", { 
+      userInput: prompt, 
+      extractedRegion, 
+      providedCity: city, 
+      finalSearchCity: searchCity 
+    });
+
     // 初始化结果
     let plan: { title: string; description?: string; keywords?: string[] } = { 
       title: "AI旅游规划" 
@@ -117,7 +165,14 @@ export async function POST(req: NextRequest) {
       const model = getDefaultModel();
       
       // 第一步：生成行程规划
-      const systemPrompt = `你是专业的中文旅游规划师。请为用户提供简洁实用的旅游建议，包括：
+      const systemPrompt = `你是专业的中文旅游规划师。请仔细分析用户的需求，特别注意用户指定的地区或省份。
+
+重要规则：
+- 如果用户明确指定了省份、城市或地区（如"甘肃三日游"、"北京旅游"），必须只推荐该地区内的景点
+- 不要推荐用户指定地区以外的任何景点
+- 景点名称要准确、具体，便于地图搜索
+
+请提供：
 1. 一个吸引人的行程标题
 2. 详细的行程安排（景点、交通、餐饮建议）
 3. 实用的预算参考
@@ -142,12 +197,17 @@ export async function POST(req: NextRequest) {
       
       // 第二步：提取关键地点
       const keywordSystemPrompt = `从旅游行程描述中提取主要的景点、地标或目的地名称。
-要求：
+
+重要要求：
 - 提取5-8个最重要的地点名称
 - 只返回地点名称，用逗号分隔
 - 不要包含形容词、介绍词
-- 地点名称要准确、简洁
-- 优先选择知名景点和地标`;
+- 地点名称要准确、简洁，包含完整的景点名称
+- 优先选择知名景点和地标
+- 确保所有地点都在用户指定的地区范围内
+- 如果原文提到了具体的省份或城市，确保提取的地点都属于该地区
+
+用户原始需求：${prompt}`;
       
       console.log("发送AI请求 - 提取关键地点...");
       const keywordResponse = await openai.chat.completions.create({
@@ -212,7 +272,7 @@ export async function POST(req: NextRequest) {
           await delay(500); // 500ms延迟
         }
         
-        const pois = await searchPOI(keyword, city);
+        const pois = await searchPOI(keyword, searchCity);
         console.log(`${keyword} 搜索结果: ${pois.length} 个POI`);
         
         if (pois.length > 0) {
@@ -223,7 +283,7 @@ export async function POST(req: NextRequest) {
             console.log(`${poi.name} 坐标来源: location字段`, location);
             results.push({
               name: poi.name,
-              city: poi.cityname || city,
+              city: poi.cityname || searchCity,
               address: poi.address,
               lat: location.lat,
               lng: location.lng,

@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import AMapLoader from "@amap/amap-jsapi-loader";
+
+// 声明全局 AMap 类型
+declare global {
+  interface Window {
+    AMap: any;
+    _AMapSecurityConfig?: { securityJsCode: string };
+  }
+}
 
 type MarkerData = {
   id: string;
@@ -37,7 +44,7 @@ type MapInstance = {
   on?: (event: string, callback: (data?: unknown) => void) => void;
 };
 
-export default function Map({ markers, className, mapStyleId = "amap://styles/macaron" }: { markers: MarkerData[]; className?: string; mapStyleId?: string }) {
+export default function Map({ markers, className, mapStyleId = "amap://styles/normal" }: { markers: MarkerData[]; className?: string; mapStyleId?: string }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstance = useRef<MapInstance | null>(null);
   const amapNsRef = useRef<AMapNamespace | null>(null);
@@ -79,47 +86,53 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
           window._AMapSecurityConfig = { securityJsCode };
         }
 
-        const ns = (await AMapLoader.load({
-          key,
-          version: "2.0",
-          plugins: ["AMap.ToolBar", "AMap.Driving", "AMap.Polyline"],
-        }).catch((loadError) => {
-          console.error("高德地图SDK加载失败:", loadError);
-          // 检查常见错误类型
-          if (loadError.message?.includes('INVALID_USER_KEY')) {
-            throw new Error("API密钥无效，请检查NEXT_PUBLIC_AMAP_JS_KEY配置");
-          } else if (loadError.message?.includes('INVALID_USER_DOMAIN')) {
-            throw new Error("域名未在白名单中，请在高德控制台添加 localhost:3000");
-          } else if (loadError.message?.includes('DAILY_QUERY_OVER_LIMIT')) {
-            throw new Error("API调用次数超限，请检查配额或稍后重试");
+                // 动态加载高德地图JS API
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = `https://webapi.amap.com/maps?v=1.4.15&key=${key}`;
+        script.onload = () => {
+          if (cancelled) return;
+          
+          if (mapRef.current && window.AMap) {
+            console.log("高德地图SDK加载成功，创建地图实例...");
+            amapNsRef.current = window.AMap;
+            const center = [116.397428, 39.90923];
+            
+            try {
+              mapInstance.current = new window.AMap.Map(mapRef.current, {
+                zoom: 4,
+                center: [104.066, 35.86], // 中国地理中心
+                mapStyle: 'amap://styles/normal'
+              });
+              
+              console.log("地图创建成功！");
+              setIsLoading(false);
+              
+              // 添加地图加载完成事件监听
+              if (mapInstance.current && mapInstance.current.on) {
+                mapInstance.current.on('complete', () => {
+                  console.log("地图瓦片加载完成");
+                });
+                
+                // 添加地图错误事件监听
+                mapInstance.current.on('error', (err: unknown) => {
+                  console.error("地图加载错误:", err);
+                  setMapError("地图瓦片加载失败，请检查网络连接");
+                });
+              }
+            } catch (mapCreateError) {
+              console.error("地图实例创建失败:", mapCreateError);
+              setMapError("地图实例创建失败，请检查API密钥和配置");
+              setIsLoading(false);
+            }
           }
-          throw loadError;
-        })) as unknown as AMapNamespace;
-
-        if (cancelled) return;
-
-        console.log("高德地图SDK加载成功，创建地图实例...");
-        amapNsRef.current = ns;
-        mapInstance.current = new ns.Map(mapRef.current, {
-          viewMode: "2D",
-          zoom: 4,
-          center: [116.397428, 39.90923],
-          mapStyle: mapStyleId,
-        });
-
-        console.log("地图创建成功！");
-        setIsLoading(false);
-        
-        // 添加地图加载完成事件监听
-        mapInstance.current.on?.('complete', () => {
-          console.log("地图瓦片加载完成");
-        });
-        
-        // 添加地图错误事件监听
-        mapInstance.current.on?.('error', (err: unknown) => {
-          console.error("地图加载错误:", err);
-          setMapError("地图瓦片加载失败，请检查网络连接");
-        });
+        };
+        script.onerror = () => {
+          console.error("高德地图SDK加载失败");
+          setMapError("地图加载失败，请检查网络连接和API密钥配置");
+          setIsLoading(false);
+        };
+        document.head.appendChild(script);
       } catch (error) {
         console.error("地图加载失败:", error);
         const errorMessage = error instanceof Error ? error.message : "地图加载失败，请检查网络连接和API密钥配置";
@@ -175,27 +188,42 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
     const created: unknown[] = [];
     const bounds = new AMap.Bounds();
     
-    // 创建自定义标记图标（小球样式）
+    // 创建自定义标记图标（专用地图标记样式）
     const createCustomIcon = (index: number, isStart = false, isEnd = false) => {
       let color = '#1890ff'; // 蓝色 - 途径点
+      let number = (index + 1).toString(); // 标记点编号
       
       if (isStart) {
         color = '#52c41a'; // 绿色 - 起点
+        number = 'S';
       } else if (isEnd) {
         color = '#f5222d'; // 红色 - 终点
+        number = 'E';
       }
       
       const svg = `
-        <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>
-          <circle cx="12" cy="12" r="6" fill="white" opacity="0.3"/>
+        <svg width="32" height="40" xmlns="http://www.w3.org/2000/svg">
+          <!-- 阴影效果 -->
+          <ellipse cx="16" cy="36" rx="8" ry="4" fill="rgba(0,0,0,0.2)"/>
+          
+          <!-- 主要标记形状 -->
+          <path d="M16 2 C8 2 2 8 2 16 C2 24 16 38 16 38 S30 24 30 16 C30 8 24 2 16 2 Z" 
+                fill="${color}" stroke="white" stroke-width="2"/>
+          
+          <!-- 内部圆形背景 -->
+          <circle cx="16" cy="16" r="10" fill="white"/>
+          
+          <!-- 编号或字母 -->
+          <text x="16" y="21" text-anchor="middle" font-family="Arial, sans-serif" 
+                font-size="12" font-weight="bold" fill="${color}">${number}</text>
         </svg>
       `;
       
       return new AMap.Icon({
         image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
-        size: [24, 24],
-        imageSize: [24, 24]
+        size: [32, 40],
+        imageSize: [32, 40],
+        anchor: [16, 38] // 锚点设置在底部中心
       });
     };
 
@@ -203,6 +231,13 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
     markers.forEach((m, index) => {
       const isStart = index === 0;
       const isEnd = index === markers.length - 1 && markers.length > 1;
+      console.log(`创建标记点 ${index + 1}/${markers.length}:`, {
+        title: m.title,
+        position: [m.longitude, m.latitude],
+        isStart,
+        isEnd
+      });
+      
       const icon = createCustomIcon(index, isStart, isEnd);
       
       const marker = new AMap.Marker({ 
@@ -242,51 +277,99 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
     if (markers.length > 1) {
       console.log("创建路线，连接", markers.length, "个地点");
       
-      // 创建驾车路线规划
-      const driving = new AMap.Driving({
-        policy: 0, // 最快路线
-      });
+      // 动态加载 Driving 插件
+      if (AMap && AMap.plugin) {
+        AMap.plugin(['AMap.Driving'], () => {
+          if (AMap.Driving) {
+            try {
+              // 创建驾车路线规划
+              const driving = new AMap.Driving({
+                policy: 0, // 最快路线
+              });
 
-      // 连接相邻的点
-      for (let i = 0; i < markers.length - 1; i++) {
-        const start: LngLat = [markers[i].longitude, markers[i].latitude];
-        const end: LngLat = [markers[i + 1].longitude, markers[i + 1].latitude];
-        
-        driving.search(start, end, (status: string, result: unknown) => {
-          const routeResult = result as { routes?: Array<{ steps: Array<{ path: Array<{ lng: number; lat: number }> }> }> };
-          if (status === 'complete' && routeResult.routes && routeResult.routes.length > 0) {
-            const route = routeResult.routes[0];
-            const path: LngLat[] = [];
-            
-            route.steps.forEach((step) => {
-              step.path.forEach((point) => {
-                path.push([point.lng, point.lat]);
-              });
-            });
-            
-            if (path.length > 0) {
-              const polyline = new AMap.Polyline({
-                path: path,
-                strokeColor: '#1890ff',
-                strokeWeight: 4,
-                strokeOpacity: 0.8
-              });
-              
-              created.push(polyline);
-              map.add([polyline]);
+              // 连接相邻的点
+              for (let i = 0; i < markers.length - 1; i++) {
+                const start: LngLat = [markers[i].longitude, markers[i].latitude];
+                const end: LngLat = [markers[i + 1].longitude, markers[i + 1].latitude];
+                
+                driving.search(start, end, (status: string, result: unknown) => {
+                  const routeResult = result as { routes?: Array<{ steps: Array<{ path: Array<{ lng: number; lat: number }> }> }> };
+                  if (status === 'complete' && routeResult.routes && routeResult.routes.length > 0) {
+                    const route = routeResult.routes[0];
+                    const path: LngLat[] = [];
+                    
+                    route.steps.forEach((step) => {
+                      step.path.forEach((point) => {
+                        path.push([point.lng, point.lat]);
+                      });
+                    });
+                    
+                    if (path.length > 0) {
+                      const polyline = new AMap.Polyline({
+                        path: path,
+                        strokeColor: '#1890ff',
+                        strokeWeight: 4,
+                        strokeOpacity: 0.8
+                      });
+                      
+                      created.push(polyline);
+                      map.add([polyline]);
+                    }
+                  } else {
+                    console.log("路线规划失败:", status);
+                  }
+                });
+              }
+            } catch (drivingError) {
+              console.error("创建路线规划失败:", drivingError);
+              // 使用直线连接作为备用方案
+              createStraightLines();
             }
+          } else {
+            console.log("AMap.Driving 插件加载失败，使用直线连接");
+            createStraightLines();
           }
         });
+      } else {
+        console.log("AMap.plugin 不可用，使用直线连接");
+        createStraightLines();
+      }
+      
+      // 创建直线连接的辅助函数
+      function createStraightLines() {
+        for (let i = 0; i < markers.length - 1; i++) {
+          const start: LngLat = [markers[i].longitude, markers[i].latitude];
+          const end: LngLat = [markers[i + 1].longitude, markers[i + 1].latitude];
+          
+          const polyline = new AMap.Polyline({
+            path: [start, end],
+            strokeColor: '#1890ff',
+            strokeWeight: 3,
+            strokeOpacity: 0.6,
+            strokeStyle: 'dashed'
+          });
+          
+          created.push(polyline);
+        }
       }
     }
 
     map.add(created);
     overlaysRef.current = created;
     
-    // 延迟设置视图，等待路线加载
-    setTimeout(() => {
-      map.setFitView();
-    }, 1000);
+    // 如果有标记点，自动调整视图以包含所有标记点
+    if (markers.length > 0) {
+      if (markers.length === 1) {
+        // 单个标记点时，以该点为中心，适当缩放
+        map.setCenter([markers[0].longitude, markers[0].latitude]);
+        map.setZoom(13);
+      } else {
+        // 多个标记点时，延迟设置视图以包含所有点，等待路线加载完成
+        setTimeout(() => {
+          map.setFitView();
+        }, 1500);
+      }
+    }
     return () => {
       if (created.length) {
         map.remove(created);
@@ -296,7 +379,11 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
 
   return (
     <div className="relative h-full">
-      <div ref={mapRef} className={className || "w-full h-full"} />
+      <div 
+        ref={mapRef} 
+        className={className || "w-full h-full"}
+        style={{ minHeight: '400px' }}
+      />
       
       {/* 地图加载提示 */}
       {isLoading && (
@@ -324,9 +411,17 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/ma
               <ol className="text-xs text-blue-700 space-y-1">
                 <li>1. 检查 .env.local 文件中的 NEXT_PUBLIC_AMAP_JS_KEY</li>
                 <li>2. 确保API密钥有效且开启了JS API服务</li>
-                <li>3. 检查域名是否在白名单中</li>
+                <li>3. 检查域名是否在白名单中 (localhost:3000)</li>
                 <li>4. 查看浏览器控制台的详细错误信息</li>
+                <li>5. 确保网络连接正常</li>
               </ol>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-left mt-3">
+              <p className="text-sm text-yellow-800 font-medium mb-2">当前配置信息：</p>
+              <ul className="text-xs text-yellow-700 space-y-1">
+                <li>• API Key 前缀: {process.env.NEXT_PUBLIC_AMAP_JS_KEY ? process.env.NEXT_PUBLIC_AMAP_JS_KEY.substring(0, 8) + '...' : '未设置'}</li>
+                <li>• 安全域名: localhost:3000</li>
+              </ul>
             </div>
             <button 
               onClick={() => window.location.reload()}

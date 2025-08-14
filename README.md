@@ -9,7 +9,7 @@
 
 ## ✨ 功能特点
 
-- 🤖 **AI智能规划**: 使用DeepSeek/OpenAI生成个性化旅游行程
+- 🤖 **AI智能规划**: 使用DeepSeek AI生成个性化旅游行程
 - 🗺️ **地图可视化**: 基于高德地图展示景点位置和路线规划
 - 📍 **智能标记**: 自动标注起点、终点和途经地点
 - 🛣️ **路线规划**: 自动生成景点间的最优行程路线
@@ -27,7 +27,7 @@
 
 ### 后端
 - **Next.js API Routes** - 服务端API
-- **OpenAI SDK** - AI对话服务
+- **DeepSeek API** - AI对话服务 (通过OpenAI SDK)
 - **Axios** - HTTP客户端
 - **Zod** - 运行时类型验证
 
@@ -70,9 +70,9 @@ pnpm install
 
 ```bash
 # AI服务配置 (必需)
-OPENAI_API_KEY=your_openai_or_deepseek_api_key
-OPENAI_BASE_URL=https://api.deepseek.com/v1  # DeepSeek用户
-OPENAI_MODEL=deepseek-chat                   # 或 gpt-3.5-turbo
+OPENAI_API_KEY=your_deepseek_api_key
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-chat
 
 # 高德地图配置 (必需)
 NEXT_PUBLIC_AMAP_JS_KEY=your_amap_js_api_key
@@ -86,10 +86,10 @@ AMAP_WEB_KEY=your_amap_web_api_key
 2. 注册账号并获取API密钥
 3. 设置 `OPENAI_BASE_URL=https://api.deepseek.com/v1`
 
-#### OpenAI API
-1. 访问 [OpenAI平台](https://platform.openai.com/)
-2. 创建API密钥
-3. 不需要设置 `OPENAI_BASE_URL`
+#### 其他AI服务 (可选)
+项目也支持OpenAI等其他兼容服务：
+1. 访问对应平台获取API密钥
+2. 相应调整 `OPENAI_BASE_URL` 和 `OPENAI_MODEL` 配置
 
 #### 高德地图API
 1. 访问 [高德开放平台](https://lbs.amap.com/)
@@ -134,8 +134,8 @@ npm run dev
 
 ## 🎯 使用方法
 
-1. **输入旅游需求**: 在右侧聊天框中描述你的旅游计划
-   - 例如："上海三日游，想去外滩、迪士尼、南京路"
+1. **输入旅游需求**: 在右侧输入框中描述你的旅游计划
+   - 例如："甘肃三日游"、"北京美食文化之旅"
    
 2. **AI生成规划**: 系统自动生成详细的行程建议
 
@@ -153,25 +153,27 @@ npm run dev
 
 ## 🔧 配置选项
 
-### AI服务提供商
+### AI服务配置
 
-支持多种AI服务：
+项目主要支持DeepSeek AI服务：
 
 ```bash
-# OpenAI
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-3.5-turbo
-
-# DeepSeek (推荐，成本更低)
+# DeepSeek (主要支持)
 OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://api.deepseek.com/v1
 OPENAI_MODEL=deepseek-chat
+
+# 其他兼容服务 (可选)
+# OPENAI_API_KEY=your_api_key
+# OPENAI_BASE_URL=your_base_url
+# OPENAI_MODEL=your_model
 ```
 
 ### 地图样式
 
 支持多种地图主题：
-- `macaron` - 鲜艳主题 (默认)
+- `normal` - 标准主题 (默认)
+- `macaron` - 鲜艳主题
 - `fresh` - 清新主题
 - `blue` - 蓝色主题
 - `dark` - 暗色主题
@@ -238,5 +240,5 @@ OPENAI_MODEL=deepseek-chat
 ## 📞 联系方式
 
 如有问题或建议，请：
-- 提交 [Issue](https://github.com/your-username/NaviTrip/issues)
-- 发起 [Discussion](https://github.com/your-username/NaviTrip/discussions)
+- 提交 [Issue](https://github.com/Ferdinandhu000/NaviTrip/issues)
+- 发起 [Discussion](https://github.com/Ferdinandhu000/NaviTrip/discussions)

@@ -45,17 +45,16 @@ async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?:
 
 export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {
   const [prompt, setPrompt] = useState("");
-  const [city, setCity] = useState("");
   const [localData, setLocalData] = useState<AIResponse | null>(null);
   const { trigger, isMutating, data } = useSWRMutation("/api/ai", sendRequest);
 
   const onSubmit = async () => {
     if (!prompt.trim()) return;
     
-    console.log("🚀 开始提交请求:", { prompt, city });
+    console.log("🚀 开始提交请求:", { prompt });
     
     try {
-      const resp = await trigger({ prompt, city: city || undefined });
+      const resp = await trigger({ prompt });
       console.log("✅ API响应成功:", resp);
       console.log("📊 API返回的POI数据:", resp?.pois);
       
@@ -105,9 +104,6 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
           <div className="flex justify-end">
             <div className="max-w-[80%] bg-blue-500 text-white rounded-2xl rounded-br-md px-4 py-3">
               <p className="text-sm">{prompt}</p>
-              {city && (
-                <p className="text-xs text-blue-100 mt-1">📍 {city}</p>
-              )}
             </div>
           </div>
         )}
@@ -229,68 +225,53 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
       </div>
 
       {/* 输入区域 */}
-      <div className="border-t border-gray-200 p-4">
+      <div className="border-t border-gray-200 p-4 bg-gradient-to-r from-blue-50/30 to-purple-50/30">
         <div className="space-y-3">
-          {city && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
-              <MapPin className="w-4 h-4" />
-              <span>目标城市：{city}</span>
-              <button 
-                onClick={() => setCity("")}
-                className="ml-auto text-gray-400 hover:text-gray-600"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <textarea
-                className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder:text-gray-500"
-                placeholder={city ? "描述你的旅游需求..." : "例如：京都三天美食文化混合行程"}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyPress={handleKeyPress}
-                rows={2}
-                disabled={isMutating}
-              />
-              {!city && (
-                <button
-                  onClick={() => setCity("")}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-blue-500"
-                  title="添加城市"
-                >
-                  <MapPin className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+          {/* 主输入区域 */}
+          <div className="relative">
+            <textarea
+              className="w-full pl-5 pr-14 py-4 bg-white border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder:text-gray-400 shadow-sm hover:shadow-md"
+              placeholder="描述你的旅游需求，例如：甘肃三日游、北京美食文化之旅..."
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyPress={handleKeyPress}
+              rows={2}
+              disabled={isMutating}
+            />
             
+            {/* AI按钮 - 内嵌在输入框右侧 */}
             <button
               onClick={onSubmit}
               disabled={isMutating || !prompt.trim()}
-              className="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+              className="absolute right-3 bottom-3 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full flex items-center justify-center transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl hover:scale-105 transform"
             >
               {isMutating ? (
-                <span className="text-white text-xs">AI</span>
+                <div className="flex space-x-0.5">
+                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce"></div>
+                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                </div>
               ) : (
-                <span className="text-white text-xs">AI</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
               )}
             </button>
           </div>
           
-          {!city && (
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-500"
-                placeholder="目标城市（可选）"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={isMutating}
-              />
-            </div>
-          )}
+          {/* 提示文本 */}
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              按 Enter 发送，Shift + Enter 换行
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              AI 助手在线
+            </span>
+          </div>
         </div>
       </div>
     </div>
