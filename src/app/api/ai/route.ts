@@ -199,10 +199,19 @@ export async function POST(req: NextRequest) {
     
     console.log("提取的关键词:", keywords);
     
-    // 并发搜索所有关键词
-    const searchPromises = keywords.map(async (keyword) => {
+    // 添加延迟函数
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    // 串行搜索关键词，避免触发API限制
+    for (const keyword of keywords) {
       try {
         console.log(`搜索关键词: ${keyword}`);
+        
+        // 在请求之间添加延迟，避免触发QPS限制
+        if (results.length > 0) {
+          await delay(500); // 500ms延迟
+        }
+        
         const pois = await searchPOI(keyword, city);
         console.log(`${keyword} 搜索结果: ${pois.length} 个POI`);
         
@@ -212,33 +221,29 @@ export async function POST(req: NextRequest) {
           
           if (location) {
             console.log(`${poi.name} 坐标来源: location字段`, location);
-            return {
+            results.push({
               name: poi.name,
               city: poi.cityname || city,
               address: poi.address,
               lat: location.lat,
               lng: location.lng,
-            };
+            });
+            console.log(`添加POI: ${poi.name}`, { lat: location.lat, lng: location.lng });
           }
+        } else {
+          console.log(`关键词 ${keyword} 没有找到有效POI`);
         }
-        
-        console.log(`关键词 ${keyword} 没有找到有效POI`);
-        return null;
         
       } catch (error) {
         console.error(`搜索关键词 ${keyword} 失败:`, error);
-        return null;
-      }
-    });
-    
-    // 等待所有搜索完成
-    const searchResults = await Promise.all(searchPromises);
-    
-    // 过滤有效结果
-    for (const result of searchResults) {
-      if (result) {
-        results.push(result);
-        console.log(`添加POI: ${result.name}`, { lat: result.lat, lng: result.lng });
+        
+        // 如果是API限制错误，等待更长时间后重试
+        if (error instanceof Error && error.message.includes('CUQPS_HAS_EXCEEDED_THE_LIMIT')) {
+          console.log(`检测到API限制，等待2秒后继续...`);
+          await delay(2000);
+        }
+        
+        continue; // 继续搜索下一个关键词
       }
     }
     
