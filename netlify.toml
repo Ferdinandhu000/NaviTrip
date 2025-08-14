@@ -1,13 +1,10 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  timeout = 120
 
 [build.environment]
   NODE_VERSION = "18"
-
-# 函数超时配置 - 解决AI API调用超时问题
-[functions]
-  timeout = 30
 
 [[redirects]]
   from = "/*"
