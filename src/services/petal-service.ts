@@ -5,7 +5,7 @@ export class PetalMapService implements MapService {
   private HMS: any = null;
   private map: any = null;
 
-  async init(container: HTMLElement, options: MapInitOptions) {
+  async init(container: HTMLElement, options: MapInitOptions): Promise<any> {
     // Load Petal Maps SDK
     const key = process.env.NEXT_PUBLIC_HUAWEI_API_KEY;
     if (!key) {
@@ -37,7 +37,7 @@ export class PetalMapService implements MapService {
     });
   }
 
-  createMarker(options: MarkerOptions) {
+  createMarker(options: MarkerOptions): any {
     return new this.HMS.Marker({
       position: { lat: options.position[1], lng: options.position[0] },
       title: options.title,
@@ -45,7 +45,7 @@ export class PetalMapService implements MapService {
     });
   }
 
-  createPolyline(options: PolylineOptions) {
+  createPolyline(options: PolylineOptions): any {
     const path = options.path.map(([lng, lat]) => ({ lat, lng }));
     return new this.HMS.Polyline({
       path,
@@ -56,7 +56,7 @@ export class PetalMapService implements MapService {
     });
   }
 
-  destroy() {
+  destroy(): void {
     if (this.map) {
       this.map.destroy();
     }

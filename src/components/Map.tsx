@@ -154,13 +154,144 @@ export default function Map({
           });
         } else {
           // Use Petal Maps implementation
-          serviceRef.current = new PetalMapService();
-          mapInstance.current = await serviceRef.current.init(mapRef.current!, {
-            viewMode: "2D",
-            zoom: 4,
-            center: [116.397428, 39.90923],
-            mapStyle: mapStyleId,
-          });
+          try {
+            const apiKey = process.env.NEXT_PUBLIC_PETAL_MAPS_API_KEY;
+            if (!apiKey) {
+              const error = "缺少Petal Maps API密钥，请在环境变量中配置 NEXT_PUBLIC_PETAL_MAPS_API_KEY";
+              console.error(error);
+              setMapError(error);
+              setIsLoading(false);
+              return;
+            }
+            
+            // 初始化Petal Maps
+            try {
+              // 检查mapRef.current是否存在
+              if (!mapRef.current) {
+                const error = "地图容器未找到";
+                console.error(error);
+                setMapError(error);
+                setIsLoading(false);
+                return;
+              }
+              
+              // 初始化 AGC 配置
+              const agConnectConfig = {
+                "agcgw": {
+                  "url": "connect-drcn.dbankcloud.cn",
+                  "backurl": "connect-drcn.hispace.hicloud.com",
+                  "websocketurl": "connect-ws-drcn.hispace.dbankcloud.cn",
+                  "websocketbackurl": "connect-ws-drcn.hispace.dbankcloud.com"
+                },
+                "agcgw_all": {
+                  "SG": "connect-dra.dbankcloud.cn",
+                  "SG_back": "connect-dra.hispace.hicloud.com",
+                  "CN": "connect-drcn.dbankcloud.cn",
+                  "CN_back": "connect-drcn.hispace.hicloud.com",
+                  "RU": "connect-drru.hispace.dbankcloud.ru",
+                  "RU_back": "connect-drru.hispace.dbankcloud.cn",
+                  "DE": "connect-dre.dbankcloud.cn",
+                  "DE_back": "connect-dre.hispace.hicloud.com"
+                },
+                "websocketgw_all": {
+                  "SG": "connect-ws-dra.hispace.dbankcloud.cn",
+                  "SG_back": "connect-ws-dra.hispace.dbankcloud.com",
+                  "CN": "connect-ws-drcn.hispace.dbankcloud.cn",
+                  "CN_back": "connect-ws-drcn.hispace.dbankcloud.com",
+                  "RU": "connect-ws-drru.hispace.dbankcloud.ru",
+                  "RU_back": "connect-ws-drru.hispace.dbankcloud.cn",
+                  "DE": "connect-ws-dre.hispace.dbankcloud.cn",
+                  "DE_back": "connect-ws-dre.hispace.dbankcloud.com"
+                },
+                "client": {
+                  "cp_id": "70086000233425680",
+                  "product_id": "461323198430218717",
+                  "project_id": "461323198430218717",
+                  "app_id": "245150415728665163"
+                },
+                "oauth_client": {
+                  "client_id": "114986285",
+                  "client_type": 7
+                },
+                "app_info": {
+                  "app_id": "245150415728665163"
+                },
+                "service": {
+                  "analytics": {
+                    "collector_url": "datacollector-drcn.dt.hicloud.com,datacollector-drcn.dt.dbankcloud.cn",
+                    "collector_url_cn": "datacollector-drcn.dt.hicloud.com,datacollector-drcn.dt.dbankcloud.cn",
+                    "collector_url_de": "datacollector-dre.dt.hicloud.com,datacollector-dre.dt.dbankcloud.cn",
+                    "collector_url_ru": "datacollector-drru.dt.dbankcloud.ru,datacollector-drru.dt.hicloud.com",
+                    "collector_url_sg": "datacollector-dra.dt.hicloud.com,datacollector-dra.dt.dbankcloud.cn",
+                    "resource_id": "p1",
+                    "channel_id": ""
+                  },
+                  "ml": {
+                    "mlservice_url": "ml-api-drcn.ai.dbankcloud.com,ml-api-drcn.ai.dbankcloud.cn"
+                  },
+                  "cloudstorage": {
+                    "storage_url": "https://agc-storage-drcn.platform.dbankcloud.cn",
+                    "storage_url_ru": "https://agc-storage-drru.cloud.huawei.ru",
+                    "storage_url_sg": "https://ops-dra.agcstorage.link",
+                    "storage_url_de": "https://ops-dre.agcstorage.link",
+                    "storage_url_cn": "https://agc-storage-drcn.platform.dbankcloud.cn",
+                    "storage_url_ru_back": "https://agc-storage-drru.cloud.huawei.ru",
+                    "storage_url_sg_back": "https://agc-storage-dra.cloud.huawei.asia",
+                    "storage_url_de_back": "https://agc-storage-dre.cloud.huawei.eu",
+                    "storage_url_cn_back": "https://agc-storage-drcn.cloud.huawei.com.cn"
+                  },
+                  "search": {
+                    "url": "https://search-drcn.cloud.huawei.com"
+                  },
+                  "edukit": {
+                    "edu_url": "edukit.cloud.huawei.com.cn",
+                    "dh_url": "edukit.cloud.huawei.com.cn"
+                  }
+                },
+                "region": "CN",
+                "configuration_version": "3.0"
+              };
+              
+              // 初始化 AGC
+              agconnect.instance().configInstance(agConnectConfig);
+              
+              serviceRef.current = new PetalMapService();
+              // 初始化Petal Maps，传递API密钥
+              mapInstance.current = await serviceRef.current.init(mapRef.current, {
+                viewMode: "2D",
+                zoom: 4,
+                center: [116.397428, 39.90923],
+                mapStyle: mapStyleId,
+                apiKey: apiKey // 确保API密钥传递给init方法
+              });
+            } catch (initError: any) {
+              console.error("Petal Maps初始化失败:", initError);
+              let errorMessage = "Petal Maps加载失败";
+              if (initError.message) {
+                errorMessage = initError.message;
+              } else if (initError.toString().includes('API key')) {
+                errorMessage = "API密钥无效，请检查Petal Maps配置";
+              } else if (initError.toString().includes('network')) {
+                errorMessage = "网络连接失败，请检查网络设置";
+              }
+              setMapError(errorMessage);
+              setIsLoading(false);
+              return;
+            }
+          } catch (initError: any) {
+            console.error("Petal Maps初始化失败:", initError);
+            let errorMessage = "Petal Maps加载失败";
+            if (initError.message) {
+              errorMessage = initError.message;
+            } else if (initError.toString().includes('API key')) {
+              errorMessage = "API密钥无效，请检查Petal Maps配置";
+            } else if (initError.toString().includes('network')) {
+              errorMessage = "网络连接失败，请检查网络设置";
+            }
+            setMapError(errorMessage);
+            setIsLoading(false);
+            return;
+          }
         }
 
         setIsLoading(false);
@@ -423,7 +554,12 @@ export default function Map({
                     <li>4. 查看浏览器控制台的详细错误信息</li>
                   </>
                 ) : (
-                  <li>Check your Petal Maps API configuration</li>
+                  <>
+                    <li>1. 检查 .env.local 文件中的 NEXT_PUBLIC_PETAL_MAPS_API_KEY</li>
+                    <li>2. 确保API密钥和配置信息正确</li>
+                    <li>3. 检查网络连接是否正常</li>
+                    <li>4. 查看浏览器控制台的详细错误信息</li>
+                  </>
                 )}
               </ol>
             </div>
@@ -454,7 +590,7 @@ export default function Map({
       )}
       
       {/* 地图控制提示 */}
-      {mapInstance.current && currentMapService === "amap" && (
+      {mapInstance.current && (
         <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg border border-gray-200">
           <div className="text-xs text-gray-600 space-y-1">
             <div className="flex items-center gap-3">
