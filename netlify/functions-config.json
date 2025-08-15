@@ -1,0 +1,5 @@
+{
+  "src/app/api/**/*.ts": {
+    "timeout": 60
+  }
+}

@@ -5,9 +5,15 @@
 [build.environment]
   NODE_VERSION = "18"
 
-# 函数超时配置 - 解决AI API调用超时问题
+# Next.js函数配置
 [functions]
-  timeout = 60
+  external_node_modules = ["openai", "axios", "zod"]
+  node_bundler = "esbuild"
+
+# 环境变量 - 函数超时
+[context.production.environment]
+  AWS_LAMBDA_JS_RUNTIME = "nodejs18.x"
+  NETLIFY_FUNCTIONS_TIMEOUT = "60"
 [[redirects]]
   from = "/*"
   to = "/index.html"
