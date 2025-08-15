@@ -2,11 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   typescript: {
-    // 禁用TypeScript类型检查，让构建能够通过
+    // 暂时禁用TypeScript类型检查，确保部署成功
     ignoreBuildErrors: true,
   },
   eslint: {
-    // 禁用ESLint检查，让构建能够通过
+    // 暂时禁用ESLint检查，确保部署成功
     ignoreDuringBuilds: true,
   },
 };
