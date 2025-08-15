@@ -164,65 +164,48 @@ export async function POST(req: NextRequest) {
       const openai = createOpenAIClient();
       const model = getDefaultModel();
       
-      // 第一步：生成行程规划
+      // 优化：单次AI调用同时生成行程和景点
       const systemPrompt = `你是专业的中文旅游规划师。请仔细分析用户的需求，特别注意用户指定的地区或省份。
 
 重要规则：
-- 如果用户明确指定了省份、城市或地区（如"甘肃三日游"、"北京旅游"），必须只推荐该地区内的景点
-- 不要推荐用户指定地区以外的任何景点
+- 如果用户明确指定了省份、城市或地区，必须只推荐该地区内的景点
 - 景点名称要准确、具体，便于地图搜索
 
-请提供：
-1. 一个吸引人的行程标题
-2. 详细的行程安排（景点、交通、餐饮建议）
-3. 实用的预算参考
-4. 注意事项
+请按以下格式回答（不要使用markdown）：
 
-请用中文回答，语言简洁明了，不要使用markdown格式。`;
+标题：[一个吸引人的行程标题]
+
+行程安排：
+[详细的景点、交通、餐饮建议，控制在300字内]
+
+关键景点：[景点1,景点2,景点3,景点4,景点5]
+
+注意事项：[简要的实用建议]`;
       
-      console.log("发送AI请求 - 生成行程规划...");
-      const planResponse = await openai.chat.completions.create({
+      console.log("发送AI请求 - 生成行程规划和景点...");
+      const response = await openai.chat.completions.create({
         model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
-        max_tokens: 1200,
+        max_tokens: 800, // 减少token数量
       }, {
-        timeout: 120000, // 增加到120秒超时
+        timeout: 25000, // 减少到25秒超时，适应Netlify限制
       });
       
-      const planText = planResponse.choices?.[0]?.message?.content || "";
+      const responseText = response.choices?.[0]?.message?.content || "";
       
-      // 第二步：提取关键地点
-      const keywordSystemPrompt = `从旅游行程描述中提取主要的景点、地标或目的地名称。
-
-重要要求：
-- 提取5-8个最重要的地点名称
-- 只返回地点名称，用逗号分隔
-- 不要包含形容词、介绍词
-- 地点名称要准确、简洁，包含完整的景点名称
-- 优先选择知名景点和地标
-- 确保所有地点都在用户指定的地区范围内
-- 如果原文提到了具体的省份或城市，确保提取的地点都属于该地区
-
-用户原始需求：${prompt}`;
+      // 解析响应
+      const titleMatch = responseText.match(/标题：(.+)/);
+      const planMatch = responseText.match(/行程安排：([\s\S]*?)关键景点：/);
+      const keywordMatch = responseText.match(/关键景点：(.+)/);
       
-      console.log("发送AI请求 - 提取关键地点...");
-      const keywordResponse = await openai.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: keywordSystemPrompt },
-          { role: "user", content: planText },
-        ],
-        temperature: 0.3,
-        max_tokens: 200,
-      }, {
-        timeout: 120000, // 增加到120秒超时
-      });
+      const planTitle = titleMatch?.[1]?.trim() || "旅游行程规划";
+      const planText = planMatch?.[1]?.trim() || responseText;
+      const keywordText = keywordMatch?.[1]?.trim() || "";
       
-      const keywordText = keywordResponse.choices?.[0]?.message?.content || "";
       const keywords = keywordText
         .split(/[,，、\n]/)
         .map(k => k.trim())
@@ -230,7 +213,7 @@ export async function POST(req: NextRequest) {
         .slice(0, 8);
       
       // 清理文本中的markdown格式
-      const cleanedTitle = cleanMarkdown(planText.split('\n')[0] || "旅游行程规划");
+      const cleanedTitle = cleanMarkdown(planTitle);
       const cleanedDescription = cleanMarkdown(planText);
       
       plan = { 

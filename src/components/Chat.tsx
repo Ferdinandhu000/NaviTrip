@@ -23,7 +23,7 @@ interface AIResponse {
 async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?: string } }) {
   try {
     const { data } = await axios.post(url, arg, {
-      timeout: 120000, // 增加到120秒超时
+      timeout: 30000, // 减少到30秒超时，适应Netlify限制
       headers: {
         'Content-Type': 'application/json',
       }
