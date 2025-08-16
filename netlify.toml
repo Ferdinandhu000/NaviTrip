@@ -9,8 +9,7 @@
 [functions]
   external_node_modules = ["openai", "axios", "zod"]
   node_bundler = "esbuild"
-  # 增加内存和超时限制
-  timeout = 10
+  # 增加内存限制
   memory = 1024
 [[redirects]]
   from = "/*"
