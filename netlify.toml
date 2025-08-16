@@ -5,9 +5,7 @@
 [build.environment]
   NODE_VERSION = "18"
 
-# Next.js函数配置 - 优化性能
-[functions]
-  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
