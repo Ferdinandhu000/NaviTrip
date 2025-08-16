@@ -42,6 +42,8 @@ type MapInstance = {
   destroy?: () => void;
   setMapStyle?: (style: string) => void;
   on?: (event: string, callback: (data?: unknown) => void) => void;
+  setCenter?: (center: LngLat) => void;
+  setZoom?: (zoom: number) => void;
 };
 
 export default function Map({ markers, className, mapStyleId = "amap://styles/normal" }: { markers: MarkerData[]; className?: string; mapStyleId?: string }) {
@@ -82,7 +84,7 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
         const securityJsCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_JS_CODE;
         if (securityJsCode && typeof window !== "undefined") {
           console.log("配置高德地图安全密钥...");
-          // @ts-expect-error amap typing
+          // @ts-ignore
           window._AMapSecurityConfig = { securityJsCode };
         }
 
@@ -158,37 +160,39 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
     mapInstance.current.setMapStyle?.(mapStyleId);
   }, [mapStyleId]);
 
+  // 使用防抖优化标记更新
+  const [debouncedMarkers, setDebouncedMarkers] = useState(markers);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMarkers(markers);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [markers]);
+
   useEffect(() => {
     const map = mapInstance.current;
     const AMap = amapNsRef.current;
-    console.log("地图标记更新", { 
-      hasMap: !!map, 
-      hasAMap: !!AMap, 
-      markersCount: markers?.length || 0,
-      markers: markers
-    });
     
     if (!map || !AMap) {
-      console.log("地图或AMap未准备好");
       return;
     }
     
     // 清理旧覆盖物
     if (overlaysRef.current && (overlaysRef.current as unknown[]).length) {
-      console.log("清理旧覆盖物", overlaysRef.current.length);
       map.remove(overlaysRef.current as unknown[]);
       overlaysRef.current = null;
     }
     
-    if (!markers?.length) {
-      console.log("没有标记点数据");
+    if (!debouncedMarkers?.length) {
       return;
     }
 
     const created: unknown[] = [];
     const bounds = new AMap.Bounds();
     
-    // 创建自定义标记图标（专用地图标记样式）
+    // 恢复完整的标记图标效果
     const createCustomIcon = (index: number, isStart = false, isEnd = false) => {
       let color = '#1890ff'; // 蓝色 - 途径点
       let number = (index + 1).toString(); // 标记点编号
@@ -222,21 +226,14 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       return new AMap.Icon({
         image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
         size: [32, 40],
-        imageSize: [32, 40],
-        anchor: [16, 38] // 锚点设置在底部中心
+        imageSize: [32, 40]
       });
     };
 
     // 创建标记点
-    markers.forEach((m, index) => {
+    debouncedMarkers.forEach((m, index) => {
       const isStart = index === 0;
-      const isEnd = index === markers.length - 1 && markers.length > 1;
-      console.log(`创建标记点 ${index + 1}/${markers.length}:`, {
-        title: m.title,
-        position: [m.longitude, m.latitude],
-        isStart,
-        isEnd
-      });
+      const isEnd = index === debouncedMarkers.length - 1 && debouncedMarkers.length > 1;
       
       const icon = createCustomIcon(index, isStart, isEnd);
       
@@ -273,101 +270,24 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       bounds.extend([m.longitude, m.latitude]);
     });
 
-    // 如果有多个点，创建路线
-    if (markers.length > 1) {
-      console.log("创建路线，连接", markers.length, "个地点");
-      
-      // 动态加载 Driving 插件
-      if (AMap && AMap.plugin) {
-        AMap.plugin(['AMap.Driving'], () => {
-          if (AMap.Driving) {
-            try {
-              // 创建驾车路线规划
-              const driving = new AMap.Driving({
-                policy: 0, // 最快路线
-              });
 
-              // 连接相邻的点
-              for (let i = 0; i < markers.length - 1; i++) {
-                const start: LngLat = [markers[i].longitude, markers[i].latitude];
-                const end: LngLat = [markers[i + 1].longitude, markers[i + 1].latitude];
-                
-                driving.search(start, end, (status: string, result: unknown) => {
-                  const routeResult = result as { routes?: Array<{ steps: Array<{ path: Array<{ lng: number; lat: number }> }> }> };
-                  if (status === 'complete' && routeResult.routes && routeResult.routes.length > 0) {
-                    const route = routeResult.routes[0];
-                    const path: LngLat[] = [];
-                    
-                    route.steps.forEach((step) => {
-                      step.path.forEach((point) => {
-                        path.push([point.lng, point.lat]);
-                      });
-                    });
-                    
-                    if (path.length > 0) {
-                      const polyline = new AMap.Polyline({
-                        path: path,
-                        strokeColor: '#1890ff',
-                        strokeWeight: 4,
-                        strokeOpacity: 0.8
-                      });
-                      
-                      created.push(polyline);
-                      map.add([polyline]);
-                    }
-                  } else {
-                    console.log("路线规划失败:", status);
-                  }
-                });
-              }
-            } catch (drivingError) {
-              console.error("创建路线规划失败:", drivingError);
-              // 使用直线连接作为备用方案
-              createStraightLines();
-            }
-          } else {
-            console.log("AMap.Driving 插件加载失败，使用直线连接");
-            createStraightLines();
-          }
-        });
-      } else {
-        console.log("AMap.plugin 不可用，使用直线连接");
-        createStraightLines();
-      }
-      
-      // 创建直线连接的辅助函数
-      function createStraightLines() {
-        for (let i = 0; i < markers.length - 1; i++) {
-          const start: LngLat = [markers[i].longitude, markers[i].latitude];
-          const end: LngLat = [markers[i + 1].longitude, markers[i + 1].latitude];
-          
-          const polyline = new AMap.Polyline({
-            path: [start, end],
-            strokeColor: '#1890ff',
-            strokeWeight: 3,
-            strokeOpacity: 0.6,
-            strokeStyle: 'dashed'
-          });
-          
-          created.push(polyline);
-        }
-      }
-    }
 
     map.add(created);
     overlaysRef.current = created;
     
     // 如果有标记点，自动调整视图以包含所有标记点
-    if (markers.length > 0) {
-      if (markers.length === 1) {
+    if (debouncedMarkers.length > 0) {
+      if (debouncedMarkers.length === 1) {
         // 单个标记点时，以该点为中心，适当缩放
-        map.setCenter([markers[0].longitude, markers[0].latitude]);
-        map.setZoom(13);
+        map.setCenter?.([debouncedMarkers[0].longitude, debouncedMarkers[0].latitude]);
+        map.setZoom?.(13);
       } else {
-        // 多个标记点时，延迟设置视图以包含所有点，等待路线加载完成
-        setTimeout(() => {
-          map.setFitView();
-        }, 1500);
+        // 多个标记点时，使用requestAnimationFrame优化性能
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            map.setFitView();
+          }, 500); // 减少延迟时间
+        });
       }
     }
     return () => {
@@ -375,57 +295,72 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
         map.remove(created);
       }
     };
-  }, [markers]);
+  }, [debouncedMarkers]);
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-full bg-transparent">
       <div 
         ref={mapRef} 
-        className={className || "w-full h-full"}
-        style={{ minHeight: '400px' }}
+        className={`${className || "w-full h-full"} overflow-hidden`}
+        style={{ minHeight: '400px', backgroundColor: 'transparent' }}
       />
       
       {/* 地图加载提示 */}
       {isLoading && (
-        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-gray-600 text-sm">地图加载中...</p>
+        <div className="absolute inset-0 bg-transparent flex items-center justify-center">
+          <div className="text-center bg-base-100/90 backdrop-blur-sm rounded-lg p-4">
+            <span className="loading loading-spinner loading-lg text-primary mb-4"></span>
+            <p className="text-base-content/70 text-sm">地图加载中...</p>
           </div>
         </div>
       )}
       
       {/* 地图加载错误 */}
       {mapError && (
-        <div className="absolute inset-0 bg-gray-50 flex items-center justify-center p-6">
-          <div className="text-center max-w-md">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="absolute inset-0 bg-transparent flex items-center justify-center p-6">
+          <div className="text-center max-w-md bg-base-100/95 backdrop-blur-sm rounded-lg p-6">
+            <div className="avatar mb-4">
+              <div className="w-16 rounded-full bg-error/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-base-content mb-2">地图加载失败</h3>
+            <p className="text-sm text-base-content/70 mb-4">{mapError}</p>
+            
+            <div className="alert alert-info text-left mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div>
+                <h4 className="font-bold">解决方案：</h4>
+                <div className="text-xs mt-1 space-y-1">
+                  <div>1. 检查 .env.local 文件中的 NEXT_PUBLIC_AMAP_JS_KEY</div>
+                  <div>2. 确保API密钥有效且开启了JS API服务</div>
+                  <div>3. 检查域名是否在白名单中 (localhost:3000)</div>
+                  <div>4. 查看浏览器控制台的详细错误信息</div>
+                  <div>5. 确保网络连接正常</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="alert alert-warning text-left mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
               </svg>
+              <div>
+                <h4 className="font-bold">当前配置信息：</h4>
+                <div className="text-xs mt-1 space-y-1">
+                  <div>• API Key 前缀: {process.env.NEXT_PUBLIC_AMAP_JS_KEY ? process.env.NEXT_PUBLIC_AMAP_JS_KEY.substring(0, 8) + '...' : '未设置'}</div>
+                  <div>• 安全域名: localhost:3000</div>
+                </div>
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">地图加载失败</h3>
-            <p className="text-sm text-gray-600 mb-4">{mapError}</p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-left">
-              <p className="text-sm text-blue-800 font-medium mb-2">解决方案：</p>
-              <ol className="text-xs text-blue-700 space-y-1">
-                <li>1. 检查 .env.local 文件中的 NEXT_PUBLIC_AMAP_JS_KEY</li>
-                <li>2. 确保API密钥有效且开启了JS API服务</li>
-                <li>3. 检查域名是否在白名单中 (localhost:3000)</li>
-                <li>4. 查看浏览器控制台的详细错误信息</li>
-                <li>5. 确保网络连接正常</li>
-              </ol>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-left mt-3">
-              <p className="text-sm text-yellow-800 font-medium mb-2">当前配置信息：</p>
-              <ul className="text-xs text-yellow-700 space-y-1">
-                <li>• API Key 前缀: {process.env.NEXT_PUBLIC_AMAP_JS_KEY ? process.env.NEXT_PUBLIC_AMAP_JS_KEY.substring(0, 8) + '...' : '未设置'}</li>
-                <li>• 安全域名: localhost:3000</li>
-              </ul>
-            </div>
+            
             <button 
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              className="btn btn-primary"
             >
               重新加载
             </button>
@@ -435,15 +370,15 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       
       {/* 标记点数量和路线提示 */}
       {markers.length > 0 && mapInstance.current && (
-        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg border border-gray-200">
-          <div className="flex items-center gap-2 text-sm mb-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="font-medium text-gray-700">{markers.length} 个推荐地点</span>
+        <div className="absolute top-3 left-3 bg-base-100/90 backdrop-blur-sm shadow-md border border-base-300/50 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
+            <span className="font-medium">{markers.length} 个地点</span>
           </div>
           {markers.length > 1 && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <div className="w-1 h-1 bg-blue-400 rounded-full"></div>
-              <span>已规划行程路线</span>
+            <div className="flex items-center gap-2 text-xs opacity-70 mt-1">
+              <div className="w-1 h-1 bg-primary/70 rounded-full"></div>
+              <span>已规划路线</span>
             </div>
           )}
         </div>
@@ -451,26 +386,23 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       
       {/* 地图控制提示 */}
       {mapInstance.current && (
-        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg border border-gray-200">
-          <div className="text-xs text-gray-600 space-y-1">
-            <div className="flex items-center gap-3">
+        <div className="absolute bottom-3 right-3 bg-base-100/90 backdrop-blur-sm shadow-md border border-base-300/50 rounded-lg px-3 py-2">
+          <div className="text-xs space-y-1.5">
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-green-500 rounded-full border border-white shadow-sm"></div>
+                <div className="w-2 h-2 bg-success rounded-full"></div>
                 <span>起点</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-blue-500 rounded-full border border-white shadow-sm"></div>
+                <div className="w-2 h-2 bg-info rounded-full"></div>
                 <span>途经</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-red-500 rounded-full border border-white shadow-sm"></div>
+                <div className="w-2 h-2 bg-error rounded-full"></div>
                 <span>终点</span>
               </div>
             </div>
-            <div>滚轮缩放 · 拖拽移动 · 点击标记查看详情</div>
-            {markers.length > 1 && (
-              <div className="text-blue-600">蓝色线条为推荐行程路线</div>
-            )}
+            <div className="opacity-70 text-[10px]">滚轮缩放 · 拖拽移动 · 点击查看详情</div>
           </div>
         </div>
       )}

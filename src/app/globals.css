@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "daisyui";
 
 :root {
   --background: #ffffff;
@@ -73,4 +74,797 @@ body {
 
 .pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* 深色模式优化 */
+[data-theme="dark"] {
+  --background: #0f1419;
+  --foreground: #e5e7eb;
+}
+
+[data-theme="dark"] .chat-bubble-secondary {
+  background-color: rgba(55, 65, 81, 0.9);
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .card {
+  background-color: rgba(31, 41, 55, 0.8);
+  border-color: rgba(75, 85, 99, 0.3);
+}
+
+/* 深色模式消息泡颜色优化 */
+[data-theme="dark"] .chat-bubble {
+  background-color: rgba(31, 41, 55, 0.95);
+  border-color: rgba(75, 85, 99, 0.4);
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .chat-bubble:hover {
+  background-color: rgba(41, 51, 65, 0.95);
+  border-color: rgba(85, 95, 109, 0.5);
+}
+
+/* 确保徽章颜色完全填充 */
+.badge {
+  background-color: currentColor !important;
+  color: white !important;
+  border: none !important;
+}
+
+.badge-success {
+  background-color: #10b981 !important;
+}
+
+.badge-error {
+  background-color: #ef4444 !important;
+}
+
+.badge-info {
+  background-color: #3b82f6 !important;
+}
+
+.badge-primary {
+  background-color: #8b5cf6 !important;
+}
+
+/* 提交按钮增强交互效果 */
+.submit-button {
+  transform-origin: center;
+  will-change: transform, box-shadow;
+}
+
+.submit-button:not(:disabled):hover {
+  animation: buttonPulse 0.6s ease-in-out;
+}
+
+@keyframes buttonPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1.05);
+  }
+}
+
+.submit-button:not(:disabled):active {
+  transform: scale(0.95) !important;
+}
+
+/* 输入框圆润样式增强 */
+.textarea {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.textarea:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* 聊天气泡样式 - 一侧尖角设计 */
+.chat-bubble {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.chat-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 用户消息气泡 - 右侧尖角 */
+.chat-end .chat-bubble {
+  border-radius: 1.5rem 0.5rem 1.5rem 1.5rem !important;
+}
+
+/* AI消息气泡 - 左侧尖角 */
+.chat-start .chat-bubble {
+  border-radius: 0.5rem 1.5rem 1.5rem 1.5rem !important;
+}
+
+/* 隐藏气泡尾巴 */
+.chat-bubble::before,
+.chat-bubble::after {
+  display: none !important;
+}
+
+/* 自定义主题控制器样式 */
+.theme-controller-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+  outline: none;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(var(--fallback-bc,oklch(var(--bc))), 0.1);
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+.theme-icon {
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-style: normal;
+  font-variant-emoji: emoji;
+}
+
+/* 玻璃效果增强 */
+.backdrop-blur-md {
+  backdrop-filter: blur(12px);
+}
+
+.backdrop-blur-sm {
+  backdrop-filter: blur(8px);
+}
+
+.backdrop-blur-lg {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* 轻量化背景效果 */
+.app-background {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+[data-theme="dark"] .app-background {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+/* 简化动画 - 减少性能开销 */
+.card-hover {
+  transition: transform 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+}
+
+/* 简化按钮动画 */
+.enhanced-button {
+  transition: background-color 0.2s ease;
+}
+
+/* 文字打字机效果 */
+@keyframes typing {
+  from { width: 0 }
+  to { width: 100% }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent }
+  50% { border-color: currentColor; }
+}
+
+.typing-effect {
+  overflow: hidden;
+  border-right: 2px solid;
+  white-space: nowrap;
+  margin: 0 auto;
+  animation: 
+    typing 2s steps(40, end),
+    blink-caret 0.75s step-end infinite;
+}
+
+/* 消息气泡进入动画 */
+@keyframes messageSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes messageSlideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.chat-message-enter-left {
+  animation: messageSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chat-message-enter-right {
+  animation: messageSlideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 地图标记点增强动画 */
+@keyframes markerDrop {
+  0% {
+    transform: translateY(-100px) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(10px) scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.marker-drop {
+  animation: markerDrop 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 状态指示器脉冲动画 */
+@keyframes statusPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.status-pulse {
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+/* 加载骨架屏动画 */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+  background-size: 200px 100%;
+}
+
+/* 响应式设计增强 */
+@media (max-width: 1024px) {
+  /* 平板设备 */
+  .app-background {
+    background-size: 200% 200%;
+  }
+  
+  /* 调整主要布局为垂直堆叠 */
+  .main-layout {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+  
+  .map-container {
+    height: 50vh;
+    min-height: 300px;
+  }
+  
+  .chat-container {
+    width: 100%;
+    height: 50vh;
+    min-height: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* 手机设备 */
+  .app-background {
+    background-size: 300% 300%;
+    animation-duration: 60s;
+  }
+  
+  /* 导航栏优化 */
+  .navbar {
+    padding: 0.5rem 1rem;
+  }
+  
+  .navbar h1 {
+    font-size: 1.25rem;
+  }
+  
+  .navbar p {
+    font-size: 0.6rem;
+  }
+  
+  /* 主要内容区域 */
+  .main-layout {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+  
+  .map-container {
+    height: 40vh;
+    min-height: 250px;
+    border-radius: 1.5rem;
+  }
+  
+  .chat-container {
+    height: 60vh;
+    min-height: 350px;
+    border-radius: 1.5rem;
+  }
+  
+  /* 聊天区域优化 */
+  .chat-messages {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  
+  .chat-bubble {
+    font-size: 0.875rem;
+    max-width: 85%;
+  }
+  
+  .chat-input-area {
+    padding: 0.75rem;
+  }
+  
+  .chat-input-area textarea {
+    font-size: 0.875rem;
+    rows: 1;
+  }
+  
+  /* 地点卡片优化 */
+  .poi-card {
+    padding: 0.75rem;
+  }
+  
+  .poi-card h4 {
+    font-size: 0.875rem;
+  }
+  
+  /* 按钮优化 */
+  .enhanced-button {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+  
+  /* 状态指示器 */
+  .status-indicators {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 小屏手机 */
+  .navbar {
+    padding: 0.5rem;
+  }
+  
+  .navbar .logo-container {
+    gap: 0.5rem;
+  }
+  
+  .navbar .logo-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  
+  .main-layout {
+    padding: 0.25rem;
+  }
+  
+  .map-container {
+    height: 35vh;
+    border-radius: 1rem;
+  }
+  
+  .chat-container {
+    height: 65vh;
+    border-radius: 1rem;
+  }
+  
+  .chat-messages {
+    padding: 0.5rem;
+    gap: 0.375rem;
+  }
+  
+  .chat-input-area {
+    padding: 0.5rem;
+  }
+  
+  .status-indicators {
+    justify-content: center;
+  }
+  
+  .status-indicators > div {
+    font-size: 0.625rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .card-hover:hover {
+    animation: none;
+    transform: none;
+  }
+  
+  .enhanced-button:hover::before {
+    left: -100%;
+  }
+  
+  /* 增大触摸目标 */
+  .enhanced-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  .theme-toggle-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .app-background {
+    background-image: none;
+    background-color: var(--background);
+  }
+  
+  .chat-bubble {
+    border-width: 2px;
+  }
+  
+  .card {
+    border-width: 2px;
+  }
+}
+
+/* 减少动画模式 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .app-background {
+    animation: none;
+  }
+  
+  .status-pulse {
+    animation: none;
+  }
+}
+
+/* 可访问性增强 */
+/* 焦点指示器 */
+.focus-visible:focus-visible,
+button:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgb(59, 130, 246);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 跳转链接 */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: rgb(59, 130, 246);
+  color: white;
+  padding: 8px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* 屏幕阅读器专用文本 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 高对比度模式增强 */
+@media (prefers-contrast: high) {
+  .chat-bubble {
+    border: 2px solid currentColor;
+    background: var(--background);
+    color: var(--foreground);
+  }
+  
+  .btn, .button, .enhanced-button {
+    border: 2px solid currentColor;
+    background: var(--background);
+    color: var(--foreground);
+  }
+  
+  .card {
+    border: 2px solid currentColor;
+    background: var(--background);
+  }
+  
+  /* 移除渐变和透明度 */
+  .bg-gradient-to-br,
+  .bg-gradient-to-r,
+  .bg-gradient-to-t {
+    background: var(--background) !important;
+  }
+  
+  .backdrop-blur-sm,
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl {
+    backdrop-filter: none !important;
+  }
+}
+
+/* 键盘导航增强 */
+.keyboard-navigation *:focus {
+  outline: 2px solid rgb(59, 130, 246);
+  outline-offset: 2px;
+}
+
+/* 错误状态指示 */
+.error-state {
+  border-color: rgb(239, 68, 68) !important;
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.error-state:focus {
+  outline-color: rgb(239, 68, 68);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* 成功状态指示 */
+.success-state {
+  border-color: rgb(34, 197, 94) !important;
+  background-color: rgba(34, 197, 94, 0.05);
+}
+
+/* 加载状态无障碍 */
+.loading-indicator[aria-busy="true"] {
+  position: relative;
+}
+
+.loading-indicator[aria-busy="true"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* 工具提示增强 */
+.tooltip-enhanced {
+  position: relative;
+}
+
+.tooltip-enhanced:hover::after,
+.tooltip-enhanced:focus::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* 深色模式可访问性优化 */
+[data-theme="dark"] .focus-visible:focus-visible,
+[data-theme="dark"] button:focus-visible,
+[data-theme="dark"] textarea:focus-visible,
+[data-theme="dark"] [tabindex]:focus-visible {
+  outline-color: rgb(147, 197, 253);
+}
+
+[data-theme="dark"] .error-state {
+  border-color: rgb(248, 113, 113);
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+[data-theme="dark"] .success-state {
+  border-color: rgb(74, 222, 128);
+  background-color: rgba(74, 222, 128, 0.1);
+}
+
+/* 新提交按钮样式 */
+.bg-size-200 {
+  background-size: 200% 100%;
+}
+
+.bg-pos-0 {
+  background-position: 0% 50%;
+}
+
+.bg-pos-100 {
+  background-position: 100% 50%;
+}
+
+/* 键盘按键样式增强 */
+.kbd {
+  background: rgba(var(--fallback-bc,oklch(var(--bc))), 0.1);
+  border: 1px solid rgba(var(--fallback-bc,oklch(var(--bc))), 0.2);
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="dark"] .kbd {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 完全移除输入框的焦点样式 */
+textarea:focus,
+input:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  ring: none !important;
+}
+
+/* 自定义输入框容器样式 */
+.input-container {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.input-container:focus-within {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* 圆形按钮增强效果 */
+.circle-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.circle-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2), rgba(236, 72, 153, 0.2));
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translate(-50%, -50%);
+}
+
+[data-theme="dark"] .circle-button::before {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3), rgba(236, 72, 153, 0.3));
+}
+
+.circle-button:hover::before {
+  width: 120%;
+  height: 120%;
+}
+
+.circle-button:active {
+  transform: scale(0.95);
+}
+
+/* 淡色按钮特殊效果 */
+.circle-button:hover {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.8), rgba(243, 232, 255, 0.8), rgba(252, 231, 243, 0.8)) !important;
+}
+
+[data-theme="dark"] .circle-button:hover {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.4), rgba(91, 33, 182, 0.4), rgba(157, 23, 77, 0.4)) !important;
+}
+
+/* 地图容器样式优化 - 消除白边 */
+.map-container .amap-container {
+  border-radius: inherit !important;
+  overflow: hidden !important;
+}
+
+/* 确保高德地图容器没有边框、内边距和白边 */
+.amap-container, 
+.amap-container canvas,
+.amap-container > div {
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: inherit !important;
+  background-color: transparent !important;
+}
+
+/* 地图瓦片层样式 */
+.amap-layer {
+  border-radius: inherit !important;
+}
+
+/* 地图控件样式优化 */
+.amap-ui-control-panel {
+  border-radius: inherit !important;
+}
+
+/* 确保地图完全填充容器 */
+.amap-container {
+  width: 100% !important;
+  height: 100% !important;
 }

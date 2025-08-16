@@ -93,7 +93,7 @@ export async function searchPOI(keyword: string, city?: string): Promise<AMapPoi
     
     const response = await axios.get(url, { 
       params,
-      timeout: 10000, // 10秒超时
+      timeout: 3000, // 3秒超时，加快失败响应
     });
     
     const parsed = GeoSchema.safeParse(response.data);
@@ -140,7 +140,7 @@ export async function geocode(address: string, city?: string): Promise<{ lat: nu
     
     const response = await axios.get(url, { 
       params,
-      timeout: 10000, // 10秒超时
+      timeout: 3000, // 3秒超时，加快失败响应
     });
     
     const parsed = GeoSchema.safeParse(response.data);

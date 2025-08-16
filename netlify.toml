@@ -5,10 +5,13 @@
 [build.environment]
   NODE_VERSION = "18"
 
-# Next.js函数配置
+# Next.js函数配置 - 优化性能
 [functions]
   external_node_modules = ["openai", "axios", "zod"]
   node_bundler = "esbuild"
+  # 增加内存和超时限制
+  timeout = 10
+  memory = 1024
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -1,8 +1,5 @@
 "use client";
 import { useState } from "react";
-import useSWRMutation from "swr/mutation";
-import axios from "axios";
-import { MapPin } from "lucide-react";
 
 // 定义类型接口
 interface PoiData {
@@ -20,25 +17,24 @@ interface AIResponse {
   error?: string;
 }
 
-async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?: string } }) {
+// 使用原生fetch替代axios，减少bundle大小
+async function sendRequest(prompt: string, chatHistory?: Array<{ type: 'user' | 'ai'; content: string; data?: any }>): Promise<AIResponse> {
   try {
-    const { data } = await axios.post(url, arg, {
-      timeout: 30000, // 减少到30秒超时，适应Netlify限制
+    const response = await fetch('/api/ai', {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      body: JSON.stringify({ prompt, chatHistory }),
     });
-    return data as AIResponse;
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
   } catch (error) {
     console.error('AI请求失败:', error);
-    if (axios.isAxiosError(error)) {
-      if (error.code === 'ECONNABORTED') {
-        throw new Error('请求超时，请稍后重试');
-      }
-      if (error.response?.status === 500) {
-        throw new Error('服务器错误，请稍后重试');
-      }
-    }
     throw new Error('AI服务暂时不可用，请稍后重试');
   }
 }
@@ -46,45 +42,55 @@ async function sendRequest(url: string, { arg }: { arg: { prompt: string; city?:
 export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {
   const [prompt, setPrompt] = useState("");
   const [localData, setLocalData] = useState<AIResponse | null>(null);
-  const { trigger, isMutating, data } = useSWRMutation("/api/ai", sendRequest);
+  const [chatHistory, setChatHistory] = useState<Array<{ type: 'user' | 'ai'; content: string; data?: AIResponse }>>([]);
+  const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
+  const [isMutating, setIsMutating] = useState(false);
 
   const onSubmit = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || isMutating) return;
     
-    console.log("🚀 开始提交请求:", { prompt });
+    const currentPrompt = prompt.trim();
+    setLocalData(null);
+    
+    // 先保存当前聊天历史，然后添加用户消息
+    const currentChatHistory = [...chatHistory, { type: 'user' as const, content: currentPrompt }];
+    setChatHistory(currentChatHistory);
+    setPrompt(""); // 立即清空输入框
+    setIsMutating(true);
     
     try {
-      const resp = await trigger({ prompt });
-      console.log("✅ API响应成功:", resp);
-      console.log("📊 API返回的POI数据:", resp?.pois);
+      const resp = await sendRequest(currentPrompt, chatHistory);
       
       if (!resp?.pois || !Array.isArray(resp.pois)) {
-        console.error("❌ POI数据格式错误:", resp?.pois);
         return;
       }
       
       // 更新本地状态，确保UI重新渲染
       setLocalData(resp);
       
-      const markers = resp.pois
-        .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
-        .map((p, idx) => ({ 
-          id: `${idx}`, 
-          title: p.name, 
-          subtitle: [p.city, p.address].filter(Boolean).join(" · "), 
-          latitude: p.lat as number, 
-          longitude: p.lng as number 
-        }));
+      // 添加AI回复到聊天记录
+      const aiContent = resp.description || resp.title;
+      setChatHistory(prev => [...prev, { type: 'ai', content: aiContent, data: resp }]);
       
-      console.log("🎯 转换后的markers数据:", markers);
-      console.log("📍 调用onMarkers，传递markers数量:", markers.length);
-      
-      onMarkers(markers);
-      
-      console.log("✅ 数据传递完成");
+      // 只有当返回了新的POI数据时才更新地图标记
+      if (resp.pois.length > 0) {
+        const markers = resp.pois
+          .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
+          .map((p, idx) => ({ 
+            id: `${idx}`, 
+            title: p.name, 
+            subtitle: [p.city, p.address].filter(Boolean).join(" · "), 
+            latitude: p.lat as number, 
+            longitude: p.lng as number 
+          }));
+        
+        onMarkers(markers);
+      }
       
     } catch (error) {
       console.error("❌ 请求失败:", error);
+    } finally {
+      setIsMutating(false);
     }
   };
 
@@ -95,96 +101,183 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
     }
   };
 
+  const toggleHistoryExpansion = (index: number) => {
+    setExpandedHistory(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col">
       {/* 聊天消息区域 */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-        {/* 用户消息 */}
-        {prompt && (localData || data) && (
-          <div className="flex justify-end">
-            <div className="max-w-[80%] bg-blue-500 text-white rounded-2xl rounded-br-md px-4 py-3">
-              <p className="text-sm">{prompt}</p>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-base-100/95 to-base-100/80 custom-scrollbar">
+        {/* 聊天历史记录 - 显示所有历史对话 */}
+        {chatHistory.map((message, index) => {
+          // 如果是最新的AI回复且已经有详细数据，则不显示（会在下面显示详细版本）
+          const isLatestAIResponse = index === chatHistory.length - 1 && message.type === 'ai' && localData && !isMutating;
+          if (isLatestAIResponse) return null;
+          
+          return (
+          <div key={index} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} chat-message-enter-${message.type === 'user' ? 'right' : 'left'}`}>
+            <div className={`max-w-[85%] px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border ${
+              message.type === 'user' 
+                ? 'bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/60 dark:to-blue-800/40 text-blue-900 dark:text-blue-200 border-blue-200/50 dark:border-blue-700/50' 
+                : 'bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/90 dark:to-slate-900/80 text-slate-800 dark:text-slate-200 border-slate-200/50 dark:border-slate-700/50'
+            }`}>
+              {message.type === 'user' ? (
+                <div className="text-sm">{message.content}</div>
+              ) : (
+                <div className="text-sm">
+                  {/* 未展开状态：只显示标题 */}
+                  {!expandedHistory.has(index) && (
+                    <div className="font-medium">{message.data?.title || message.content}</div>
+                  )}
+                  
+                  {/* 展开状态：显示完整内容 */}
+                  {expandedHistory.has(index) && (
+                    <div>
+                      <div className="font-medium mb-2">{message.data?.title || message.content}</div>
+                      {message.data?.description && (
+                        <div className="text-xs opacity-75 mb-2 whitespace-pre-line">{message.data.description}</div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* 展开/收起按钮 */}
+                  {message.data?.pois && message.data.pois.length > 0 && (
+                    <div>
+                      <button 
+                        onClick={() => toggleHistoryExpansion(index)}
+                        className="text-xs opacity-60 hover:opacity-80 transition-opacity duration-200 flex items-center gap-1 mt-2"
+                      >
+                        <span>包含 {message.data.pois.length} 个推荐地点</span>
+                        <svg 
+                          className={`w-3 h-3 transition-transform duration-200 ${expandedHistory.has(index) ? 'rotate-180' : ''}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      
+                      {expandedHistory.has(index) && message.data?.pois && (
+                        <div className="mt-2 space-y-1 border-t border-slate-200/50 dark:border-slate-600/50 pt-2">
+                          {message.data.pois.map((poi: PoiData, poiIndex: number) => (
+                            <div key={poiIndex} className="text-xs opacity-70 flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 bg-current rounded-full flex-shrink-0"></div>
+                              <span>{poi.name}</span>
+                              {poi.city && <span className="opacity-50">· {poi.city}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+          );
+        }).filter(Boolean)}
 
-        {/* AI回复消息 */}
-        {(localData || data) && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">AI</span>
-                </div>
-                <h3 className="font-semibold text-gray-900 text-sm">{(localData || data)?.title}</h3>
-              </div>
+        {/* 当前最新的AI回复（详细版本） - 只有在不是历史记录时才显示 */}
+        {localData && !isMutating && chatHistory.length > 0 && chatHistory[chatHistory.length - 1]?.type === 'ai' && (
+          <div className="flex justify-start chat-message-enter-left">
+            <div className="max-w-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/90 dark:to-slate-900/80 text-slate-800 dark:text-slate-200 border border-slate-200/50 dark:border-slate-700/50 shadow-lg backdrop-blur-sm rounded-2xl px-4 py-3">
+              <div className="font-medium mb-2 text-slate-800 dark:text-slate-200">{localData?.title}</div>
               
-              {(localData || data)?.description && (
-                <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed mb-3">
-                  {(localData || data)?.description}
+              {localData?.description && (
+                <div className="text-sm whitespace-pre-wrap leading-relaxed mb-3 opacity-90 dark:opacity-90 text-slate-700 dark:text-slate-300">
+                  {localData?.description}
                 </div>
               )}
               
-              {(localData || data)?.pois?.length ? (
+              {localData?.pois?.length ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
-                    <MapPin className="w-4 h-4 text-blue-500" />
-                    推荐地点 ({(localData || data)?.pois?.length || 0})
-                    {((localData || data)?.pois?.length || 0) > 1 && (
-                      <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">
+                  <div className="flex items-center gap-2 text-sm font-normal text-slate-800 dark:text-slate-200">
+                    <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    推荐地点 ({localData?.pois?.length || 0})
+                    {(localData?.pois?.length || 0) > 1 && (
+                      <div className="badge badge-primary badge-sm dark:text-white">
                         已规划路线
-                      </span>
+                      </div>
                     )}
                   </div>
                   
-                  <div className="space-y-2">
-                    {(localData || data)?.pois?.map((p: PoiData, i: number) => {
+                  <div className="space-y-1.5">
+                    {localData?.pois?.map((p: PoiData, i: number) => {
                       const isStart = i === 0;
-                      const poisLength = (localData || data)?.pois?.length || 0;
+                      const poisLength = localData?.pois?.length || 0;
                       const isEnd = i === poisLength - 1 && poisLength > 1;
                       
                       return (
                         <div 
                           key={i}
-                          className="bg-white rounded-lg p-3 border border-gray-200 relative"
+                          className="card card-compact bg-gradient-to-br from-base-100 to-base-200/50 dark:from-slate-700/80 dark:to-slate-800/60 border border-base-300/50 dark:border-slate-600/30 relative shadow-lg hover:shadow-xl transition-all duration-300 card-hover group"
                         >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {isStart ? (
-                                <span className="text-green-600 text-sm">🚩</span>
-                              ) : isEnd ? (
-                                <span className="text-red-600 text-sm">🏁</span>
-                              ) : (
-                                <span className="text-blue-600 text-sm">📍</span>
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900 text-sm flex items-center gap-2">
-                                {p.name}
-                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                  {isStart ? '起点' : isEnd ? '终点' : `第${i + 1}站`}
-                                </span>
-                              </div>
-                              {(p.city || p.address) && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {[p.city, p.address].filter(Boolean).join(" · ")}
+                          {/* 装饰性渐变背景 */}
+                          <div className={`absolute inset-0 rounded-2xl bg-gradient-to-r ${
+                            isStart ? 'from-success/10 to-success/5' : 
+                            isEnd ? 'from-error/10 to-error/5' : 
+                            'from-info/10 to-info/5'
+                          } opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
+                          
+                          <div className="card-body relative z-10 p-3">
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0 mt-0.5">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium shadow-md ${
+                                  isStart ? 'bg-success/20 text-success border-2 border-success/30' : 
+                                  isEnd ? 'bg-error/20 text-error border-2 border-error/30' : 
+                                  'bg-info/20 text-info border-2 border-info/30'
+                                }`}>
+                                  {isStart ? '🚩' : isEnd ? '🏁' : (i + 1)}
                                 </div>
-                              )}
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <h4 className="font-medium text-sm text-base-content dark:text-slate-200 group-hover:text-primary transition-colors duration-200">
+                                    {p.name}
+                                  </h4>
+                                  <div className={`badge badge-xs ${
+                                    isStart ? 'badge-success' : 
+                                    isEnd ? 'badge-error' : 
+                                    'badge-info'
+                                  } dark:text-white shadow-sm !bg-opacity-100`}>
+                                    {isStart ? '起点' : isEnd ? '终点' : `第${i + 1}站`}
+                                  </div>
+                                </div>
+                                {(p.city || p.address) && (
+                                  <div className="text-xs opacity-75 dark:opacity-80 text-base-content dark:text-slate-400 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    {[p.city, p.address].filter(Boolean).join(" · ")}
+                                  </div>
+                                )}
+                              </div>
                             </div>
+                            {/* 连接线 */}
+                            {i < (localData?.pois?.length || 0) - 1 && (
+                              <div className="absolute left-7 bottom-0 w-0.5 h-3 bg-gradient-to-b from-primary/40 to-primary/20 dark:from-primary/60 dark:to-primary/30 transform translate-y-full"></div>
+                            )}
                           </div>
-                          {i < ((localData || data)?.pois?.length || 0) - 1 && (
-                            <div className="absolute left-6 bottom-0 w-0.5 h-3 bg-blue-300 transform translate-y-full"></div>
-                          )}
                         </div>
                       );
                     })}
                   </div>
                   
-                  {((localData || data)?.pois?.length || 0) > 1 && (
-                    <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded-lg mt-2">
-                      💡 地图上的蓝色线条显示推荐行程路线，点击标记查看详细信息
-                    </div>
-                  )}
+
                 </div>
               ) : null}
             </div>
@@ -194,83 +287,89 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
         {/* 加载状态 */}
         {isMutating && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">AI</span>
-                </div>
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                </div>
-                <span className="text-sm text-gray-600">正在规划行程...</span>
+            <div className="max-w-[85%] px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-lg backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <span className="loading loading-dots loading-sm"></span>
+                <span className="text-sm">正在规划行程...</span>
               </div>
             </div>
           </div>
         )}
         
         {/* 欢迎消息 */}
-        {!data && !isMutating && (
-          <div className="flex justify-center">
-            <div className="text-center text-gray-500 py-8">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MapPin className="w-8 h-8 text-blue-500" />
+        {chatHistory.length === 0 && !isMutating && (
+          <div className="hero min-h-[120px]">
+            <div className="hero-content text-center">
+              <div className="max-w-md">
+                <h1 className="text-lg font-medium text-base-content">AI 旅游规划助手</h1>
+                <p className="py-1 text-base-content/70">告诉我你的旅游需求，我来为你规划完美行程</p>
               </div>
-              <h3 className="text-lg font-medium text-gray-700 mb-2">AI 旅游规划助手</h3>
-              <p className="text-sm text-gray-500">告诉我你的旅游需求，我来为你规划完美行程</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* 输入区域 */}
-      <div className="border-t border-gray-200 p-4 bg-gradient-to-r from-blue-50/30 to-purple-50/30">
-        <div className="space-y-3">
-          {/* 主输入区域 */}
-          <div className="relative">
-            <textarea
-              className="w-full pl-5 pr-14 py-4 bg-white border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 placeholder:text-gray-400 shadow-sm hover:shadow-md"
-              placeholder="描述你的旅游需求，例如：甘肃三日游、北京美食文化之旅..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyPress={handleKeyPress}
-              rows={2}
-              disabled={isMutating}
-            />
+      {/* 输入区域 - 统一大框设计 */}
+      <div className="border-t border-base-300/20 p-4 bg-gradient-to-t from-base-100/60 via-base-100/40 to-base-100/30 backdrop-blur-xl relative">
+        {/* 多层装饰效果 */}
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/5 via-transparent to-secondary/5 pointer-events-none"></div>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent"></div>
+        
+        <div className="relative z-10">
+          {/* 统一的大框包裹所有组件 */}
+          <div className="input-container bg-base-100/90 dark:bg-slate-800/95 backdrop-blur-md border-2 border-base-300/30 dark:border-slate-600/30 rounded-3xl shadow-lg p-4">
+            {/* 输入框和按钮容器 */}
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <textarea
+                  className="w-full resize-none bg-transparent border-none focus:outline-none focus:ring-0 text-base-content dark:text-slate-300 placeholder:text-base-content/60 dark:placeholder:text-slate-500 text-sm leading-relaxed"
+                  placeholder="✨ 描述你的旅游需求，例如：甘肃三日游、北京美食文化之旅..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  rows={2}
+                  disabled={isMutating}
+                  style={{ minHeight: '2.5rem' }}
+                />
+              </div>
+              
+              {/* 圆形提交按钮 */}
+              <button
+                onClick={onSubmit}
+                disabled={isMutating || !prompt.trim()}
+                className={`circle-button flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  prompt.trim() && !isMutating
+                    ? 'bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 dark:from-blue-900/30 dark:via-purple-900/30 dark:to-pink-900/30 text-purple-600 dark:text-purple-400 shadow-lg hover:shadow-xl hover:scale-110 border border-purple-200/50 dark:border-purple-700/30' 
+                    : 'bg-base-300/50 text-base-content/40 cursor-not-allowed'
+                } ${isMutating ? 'animate-pulse' : ''}`}
+              >
+                {isMutating ? (
+                  <span className="loading loading-spinner loading-xs"></span>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                )}
+              </button>
+            </div>
             
-            {/* AI按钮 - 内嵌在输入框右侧 */}
-            <button
-              onClick={onSubmit}
-              disabled={isMutating || !prompt.trim()}
-              className="absolute right-3 bottom-3 w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-full flex items-center justify-center transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl hover:scale-105 transform"
-            >
-              {isMutating ? (
-                <div className="flex space-x-0.5">
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce"></div>
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                </div>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              )}
-            </button>
-          </div>
-          
-          {/* 提示文本 */}
-          <div className="flex items-center justify-between text-xs text-gray-500">
-            <span className="flex items-center gap-1">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              按 Enter 发送，Shift + Enter 换行
-            </span>
-            <span className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              AI 助手在线
-            </span>
+            {/* 底部提示信息 */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-base-300/20 dark:border-slate-600/20">
+              <div className="flex items-center gap-1.5 text-xs text-base-content/60 dark:text-slate-400">
+                <kbd className="kbd kbd-xs bg-base-200/50 dark:bg-slate-700/50 text-base-content/70 dark:text-slate-300">Enter</kbd>
+                <span>发送</span>
+                <span className="text-base-content/40 dark:text-slate-500">•</span>
+                <kbd className="kbd kbd-xs bg-base-200/50 dark:bg-slate-700/50 text-base-content/70 dark:text-slate-300">Shift</kbd>
+                <span>+</span>
+                <kbd className="kbd kbd-xs bg-base-200/50 dark:bg-slate-700/50 text-base-content/70 dark:text-slate-300">Enter</kbd>
+                <span>换行</span>
+              </div>
+              
+              <div className="flex items-center gap-2 text-xs text-success">
+                <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                <span>AI 助手在线</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
