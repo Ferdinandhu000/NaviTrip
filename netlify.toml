@@ -9,8 +9,6 @@
 [functions]
   external_node_modules = ["openai", "axios", "zod"]
   node_bundler = "esbuild"
-  # 增加内存限制
-  memory = 1024
 [[redirects]]
   from = "/*"
   to = "/index.html"
