@@ -7,7 +7,6 @@
 
 # Next.js函数配置 - 优化性能
 [functions]
-  external_node_modules = ["openai", "axios", "zod"]
   node_bundler = "esbuild"
 [[redirects]]
   from = "/*"
