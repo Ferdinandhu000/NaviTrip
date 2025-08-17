@@ -77,7 +77,7 @@ pnpm install
 
 ### 3. 环境配置
 
-创建 `.env.local` 文件：
+创建 `.env.local` 文件（本项目目前已提供该文件，仅供测试）：
 
 ```bash
 # AI服务配置 (必需)
@@ -91,6 +91,13 @@ AMAP_WEB_KEY=your_amap_web_api_key
 ```
 
 ### 4. 获取API密钥
+
+#### 🎯 **临时API密钥说明**
+> **重要提醒**：本项目会提供一个临时的API密钥配置，**仅供测试和个人使用**。
+> 
+> - ✅ **适合**：个人学习、功能测试、小规模使用
+> - ❌ **不适合**：商业用途、大规模部署、生产环境
+> - ⚠️ **注意**：临时密钥有使用限制，建议获取自己的API密钥
 
 #### DeepSeek API (推荐)
 1. 访问 [DeepSeek开放平台](https://platform.deepseek.com/)
@@ -159,7 +166,7 @@ npm run dev
 │   └── types/               # TypeScript类型定义
 │       └── plan.ts          # 旅游规划相关类型
 ├── public/                  # 静态资源
-├── .env.local              # 环境变量 (需要创建)
+├── .env.local              # 环境变量 (包含临时API密钥，仅供测试)
 ├── next.config.ts          # Next.js配置
 ├── tailwind.config.js      # Tailwind配置
 └── tsconfig.json          # TypeScript配置
@@ -235,22 +242,7 @@ OPENAI_MODEL=deepseek-chat
 - `dark` - 暗色主题
 - 更多样式...
 
-## 🚀 部署
 
-### Vercel (推荐)
-
-1. Fork本项目到你的GitHub
-2. 在 [Vercel](https://vercel.com) 导入项目
-3. 配置环境变量
-4. 部署完成
-
-### 其他平台
-
-支持部署到任何支持Node.js的平台：
-- Netlify
-- Railway
-- Heroku
-- 自托管服务器
 
 ## 🤝 贡献指南
 
@@ -275,7 +267,7 @@ OPENAI_MODEL=deepseek-chat
 
 本项目基于 [MIT License](LICENSE) 开源协议。
 
-## 🙏 致谢 - 站在巨人的肩膀上
+## 🙏 致谢
 
 ### 🏆 **核心技术合作伙伴**
 - [Next.js](https://nextjs.org/) - **React全栈框架的黄金标准**，为NaviTrip提供强大的技术基础
