@@ -111,6 +111,39 @@ body {
   border: none !important;
 }
 
+/* 聊天窗口折叠按钮样式 */
+.chat-container {
+  position: relative;
+}
+
+.chat-container .btn-circle {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+/* 折叠按钮悬停效果 */
+.chat-container .btn-circle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 自定义Tooltip样式 */
+.custom-tooltip {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+
+/* 深色模式Tooltip优化 */
+[data-theme="dark"] .custom-tooltip {
+  background-color: rgba(55, 65, 81, 0.95);
+  color: #f3f4f6;
+  border: 1px solid rgba(75, 85, 99, 0.5);
+}
+
 .badge-success {
   background-color: #10b981 !important;
 }
