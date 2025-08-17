@@ -1,4 +1,3 @@
-import axios, { AxiosError } from "axios";
 import { z } from "zod";
 
 /**
@@ -91,12 +90,29 @@ export async function searchPOI(keyword: string, city?: string): Promise<AMapPoi
       extensions: "base" 
     };
     
-    const response = await axios.get(url, { 
-      params,
-      timeout: 3000, // 3秒超时，加快失败响应
+    const queryString = new URLSearchParams({
+      key: params.key,
+      keywords: params.keywords,
+      city: params.city || '',
+      offset: params.offset.toString(),
+      page: params.page.toString(),
+      extensions: params.extensions
+    }).toString();
+    const fullUrl = `${url}?${queryString}`;
+    
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
     
-    const parsed = GeoSchema.safeParse(response.data);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const parsed = GeoSchema.safeParse(data);
     if (!parsed.success) {
       console.error("高德地图API响应格式错误:", parsed.error);
       return [];
@@ -112,13 +128,11 @@ export async function searchPOI(keyword: string, city?: string): Promise<AMapPoi
     return pois || [];
     
   } catch (error) {
-    if (error instanceof AxiosError) {
-      console.error("高德地图POI搜索网络错误:", error.message);
-      throw new Error(`网络请求失败: ${error.message}`);
-    }
-    
     console.error("高德地图POI搜索错误:", error);
-    throw error;
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('未知错误');
   }
 }
 
@@ -138,12 +152,26 @@ export async function geocode(address: string, city?: string): Promise<{ lat: nu
       city: city?.trim() 
     };
     
-    const response = await axios.get(url, { 
-      params,
-      timeout: 3000, // 3秒超时，加快失败响应
+    const queryString = new URLSearchParams({
+      key: params.key,
+      address: params.address,
+      city: params.city || ''
+    }).toString();
+    const fullUrl = `${url}?${queryString}`;
+    
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
     
-    const parsed = GeoSchema.safeParse(response.data);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const parsed = GeoSchema.safeParse(data);
     if (!parsed.success) {
       console.error("高德地图地理编码API响应格式错误:", parsed.error);
       return null;
@@ -170,13 +198,11 @@ export async function geocode(address: string, city?: string): Promise<{ lat: nu
     return null;
     
   } catch (error) {
-    if (error instanceof AxiosError) {
-      console.error("高德地图地理编码网络错误:", error.message);
-      throw new Error(`网络请求失败: ${error.message}`);
-    }
-    
     console.error("高德地图地理编码错误:", error);
-    throw error;
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('未知错误');
   }
 }
 
