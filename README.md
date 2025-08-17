@@ -286,7 +286,6 @@ OPENAI_MODEL=deepseek-chat
 ### 🌟 **社区支持**
 感谢所有为NaviTrip项目做出贡献的开发者、设计师和用户！
 
----
 
 ## ⭐ **支持我们**
 
@@ -294,7 +293,6 @@ OPENAI_MODEL=deepseek-chat
 
 **您的支持是我们持续创新的动力！** 🚀
 
----
 
 
 
