@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AI 旅游规划",
   description: "使用开源模型与高德地图生成行程与地图标注",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

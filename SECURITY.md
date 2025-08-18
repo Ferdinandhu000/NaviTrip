@@ -65,20 +65,15 @@
 
 ### 3. 部署环境配置
 
-#### Vercel 部署
+本项目当前推荐部署到 Netlify。请在 Netlify 的项目设置中添加以下环境变量：
 
-1. 在 Vercel 项目设置中添加环境变量：
-   - `OPENAI_API_KEY`
-   - `OPENAI_BASE_URL`
-   - `OPENAI_MODEL`
-   - `NEXT_PUBLIC_AMAP_JS_KEY`
-   - `AMAP_WEB_KEY`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
+- `NEXT_PUBLIC_AMAP_JS_KEY`
+- `AMAP_WEB_KEY`
 
-2. 项目已包含 `vercel.json` 配置文件，会自动映射环境变量。
-
-#### 其他平台
-
-根据部署平台的文档配置相应的环境变量。
+其他平台（Railway、自托管等）请参考各平台文档配置相应环境变量。
 
 ## 📁 项目文件说明
 
