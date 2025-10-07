@@ -33,7 +33,7 @@ type PoiResult = {
 };
 
 /**
- * 清理文本中的markdown格式
+ * 清理文本中的代码格式
  */
 function cleanMarkdown(text: string): string {
   return text
@@ -178,7 +178,7 @@ function extractRegionFromPrompt(prompt: string): string | undefined {
     '青海', '宁夏', '新疆', '内蒙古', '台湾', '香港', '澳门'
   ];
   
-  // 主要城市列表（扩展版）
+  // 主要城市列表（扩展版，特别添加东北地区城市）
   const cities = [
     // 一线城市
     '深圳', '广州',
@@ -189,6 +189,10 @@ function extractRegionFromPrompt(prompt: string): string | undefined {
     '南昌', '合肥', '福州', '厦门', '南宁', '海口', '昆明', '贵阳', '拉萨', '兰州',
     '西宁', '银川', '乌鲁木齐', '温州', '佛山', '东莞', '泉州', '惠州', '嘉兴',
     '烟台', '珠海', '镇江', '盐城', '金华', '台州', '绍兴', '湖州', '常州',
+    // 东北地区城市（重点添加）
+    '丹东', '键州', '本溪', '辽阳', '鸞山', '若山', '沈阳', '大连', '铁岭', '抚顺', '平顶山',
+    '长春', '吉林', '四平', '松原', '白城', '白山', '哈尔滨', '齐齐哈尔', '牧丹江', '佳木斯',
+    '鹤岗', '绥化', '东清', '绥化', '牡丹江', '佳木斯', '雙鸭山',
     // 热门旅游城市
     '桂林', '丽江', '大理', '三亚', '张家界', '九寨沟', '黄山', '泰山', '庐山',
     '峨眉山', '普陀山', '五台山', '华山', '衡山', '恒山', '嵩山', '武当山',
@@ -263,9 +267,39 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 从用户输入中提取地区信息
+    // 从用户输入中提取地区信息，并从聊天历史中推断原始地区
     const extractedRegion = extractRegionFromPrompt(prompt);
-    const searchCity = city || extractedRegion; // 优先使用传入的city参数，否则使用提取的地区
+    let searchCity = city || extractedRegion; // 优先使用传入的city参数，否则使用提取的地区
+    
+    // 如果当前输入没有地区信息，尝试从聊天历史中推断
+    if (!searchCity && chatHistory && chatHistory.length > 0) {
+      // 从历史消息中查找地区信息
+      for (const msg of chatHistory) {
+        if (msg.type === 'user') {
+          const historicalRegion = extractRegionFromPrompt(msg.content);
+          if (historicalRegion) {
+            searchCity = historicalRegion;
+            console.log(`从聊天历史中推断出地区: ${historicalRegion}`);
+            break; // 使用最早出现的地区信息
+          }
+        }
+      }
+      
+      // 从历史AI回复中查找地区信息
+      if (!searchCity) {
+        for (const msg of chatHistory) {
+          if (msg.type === 'ai' && msg.data?.pois && msg.data.pois.length > 0) {
+            // 从第一个POI的城市信息中推断
+            const firstPoi = msg.data.pois[0];
+            if (firstPoi.city) {
+              searchCity = firstPoi.city;
+              console.log(`从历史POI数据中推断出地区: ${firstPoi.city}`);
+              break;
+            }
+          }
+        }
+      }
+    }
 
     console.log("地区信息:", { 
       userInput: prompt, 
@@ -291,27 +325,31 @@ export async function POST(req: NextRequest) {
       const openai = createOpenAIClient();
       const model = getDefaultModel();
       
-      // 根据天数智能调整详细程度的prompt
-      const systemPrompt = `你是旅游规划师。根据用户需求制定行程，注意控制回答长度避免超时。你能够基于之前的对话内容提供上下文相关的回答。
+      // 智能旅游规划prompt - 增强地区一致性
+      let systemPrompt = `你是专业的旅游规划师。根据用户需求制定详细行程，提供完整的旅游规划服务。你能够基于对话历史提供上下文相关的回答。
 
 核心要求：
 - 仔细阅读对话历史，准确理解用户的具体需求
+- 识别用户是否要求重新规划行程（关键词包括：重新规划、重新安排、换个地方、改变路线、重新设计、换条线路、重新来、再规划一个、重新制定、修改行程等）
+- 如果是重新规划请求，必须提供新的景点和完整的新行程，并在回答末尾包含"关键景点："部分
+- **重要：地区一致性保持** - 如果对话历史中显示用户之前咨询某个地区的旅游，在重新规划时必须保持在同一地区内推荐景点
+- 如果是第一个问题（没有对话历史），这必然是全新的旅游规划请求
 - 如果用户询问具体某天的行程（如"第三天的行程安排"、"第四天怎么玩"），请：
   1. 仔细查看对话历史中assistant角色的回复，找到完整的多日行程规划
   2. 在行程规划中查找"第X天"或"DayX"的具体内容
   3. 精确定位用户询问的那一天（第1天、第2天、第3天、第4天、第5天等）
-  4. 提取该天的景点和活动安排（如：玄武湖公园、湖南路美食街、鸡鸣寺、台城、狮子桥夜市等）
+  4. 提取该天的景点和活动安排
   5. 基于这些具体景点提供详细的时间、交通、用餐建议
   6. 绝对不要混淆不同天数的行程安排，也不要自己编造景点
-- 如果是全新的旅游规划请求，严格按用户指定地区推荐景点，景点名要准确
-- 景点总数控制在10个以内
+- 如果是全新的旅游规划请求或重新规划请求，严格按用户指定地区推荐景点，景点名要准确
+- 提供详细完整的规划内容，包括时间安排、交通建议、费用估算、实用贴士等`;
 
-重要提醒：
-- 用户问第1天 → 回答第1天的安排
-- 用户问第2天 → 回答第2天的安排
-- 用户问第3天 → 回答第3天的安排
-- 用户问第4天 → 回答第4天的安排
-- 绝对不要弄错天数！
+      // 如果检测到地区信息，在系统提示中强调
+      if (searchCity) {
+        systemPrompt += `\n\n**重要提示：当前的旅游规划需要严格限定在 ${searchCity} 地区内。所有推荐的景点、餐厅、住宿都必须位于 ${searchCity} 及其周边区域。不要推荐其他城市或地区的景点。**`;
+      }
+      
+      systemPrompt += `
 
 回答格式：
 
@@ -327,14 +365,17 @@ export async function POST(req: NextRequest) {
 费用：[预估费用]
 小贴士：[实用建议]
 
-示例：如果对话历史中显示"第4天：自然人文 • 上午：玄武湖公园 • 中午：湖南路美食街 • 下午：鸡鸣寺+台城 • 晚上：狮子桥夜市"，
-当用户询问"第4天的具体行程安排"时，你应该基于玄武湖公园、湖南路美食街、鸡鸣寺、台城、狮子桥夜市这些地点来制定详细安排。
-
-如果是新的旅游规划：
+如果是新的旅游规划或重新规划：
 标题：[简洁的行程标题]
-[根据天数调整详细程度的每日安排]
-[如果是4天以上行程，在结尾添加互动提示]
-关键景点：[所有景点名称，用逗号分隔]`;
+📍 推荐景点：[详细的每日行程安排，包括具体时间、景点介绍、交通方式、费用估算等]
+💡 实用贴士：[交通建议、注意事项、最佳游览时间等]
+💰 费用预算：[详细的费用分解]
+关键景点：[所有景点名称，用逗号分隔]
+
+重要：
+1. 对于重新规划请求，必须提供全新的景点和路线，不要重复之前的推荐
+2. 必须在回答末尾包含"关键景点："部分，以便系统在地图上标记新的地点
+3. 请提供详细、实用的规划内容，帮助用户获得最佳的旅游体验`;
       
       // 构建包含上下文的消息历史
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -378,16 +419,46 @@ export async function POST(req: NextRequest) {
         model,
         messages,
         temperature: 0.7, // 平衡创造性和一致性
-        // 移除max_tokens限制，让AI充分发挥
+        // 移除所有限制，让AI提供最详细完整的回复
       }, {
-        timeout: 10000, // 10秒超时，确保长天数行程也能及时响应
+        timeout: 30000, // 增加到30秒超时，支持更详细的回复
       });
       
       const responseText = response.choices?.[0]?.message?.content || "";
       
-      // 检测是否为上下文查询（详细询问某一天的行程安排）
-      const isContextualQuery = responseText.includes("【详细规划】") || 
-                                (!responseText.includes("标题：") && !responseText.includes("关键景点："));
+      // 智能检测上下文查询类型和重新规划意图
+      const isFirstQuestion = !chatHistory || chatHistory.length === 0;
+      const hasPreviousPlan = chatHistory && chatHistory.some(msg => 
+        msg.type === 'ai' && msg.data?.pois && msg.data.pois.length > 0
+      );
+      
+      // 检测是否为重新规划意图
+      const replanningKeywords = [
+        '重新规划', '重新安排', '换个地方', '改变路线', '重新设计', 
+        '换条线路', '重新来', '再规划一个', '重新制定', '修改行程',
+        '换个行程', '另外规划', '重新推荐', '另外推荐', '换个方案'
+      ];
+      const isReplanning = replanningKeywords.some(keyword => prompt.includes(keyword));
+      
+      console.log("重新规划意图检测:", {
+        用户输入: prompt,
+        检测到的关键词: replanningKeywords.filter(keyword => prompt.includes(keyword)),
+        是否重新规划: isReplanning,
+        是否第一个问题: isFirstQuestion,
+        是否有历史规划: hasPreviousPlan
+      });
+      
+      // 上下文查询判断逻辑：
+      // 1. 如果包含【详细规划】，明确是详细询问
+      // 2. 如果是第一个问题，肯定是新规划
+      // 3. 如果之前没有过POI数据，也视为新规划
+      // 4. 如果检测到重新规划意图，则视为新规划
+      // 5. 如果回复中没有标题和关键景点，且不是第一个问题，可能是详细询问
+      const isContextualQuery = !isFirstQuestion && 
+                                hasPreviousPlan && 
+                                !isReplanning &&
+                                (responseText.includes("【详细规划】") || 
+                                 (!responseText.includes("标题：") && !responseText.includes("关键景点：")));
       
       let planTitle: string;
       let planText: string;
@@ -403,30 +474,70 @@ export async function POST(req: NextRequest) {
         console.log("响应文本包含【详细规划】:", responseText.includes("【详细规划】"));
         console.log("响应文本前100字符:", responseText.substring(0, 100));
       } else {
-        // 标准新规划：解析标准格式
+        // 标准新规划或重新规划：解析标准格式
+        console.log("识别为新规划或重新规划，将搜索新的POI地点");
         const titleMatch = responseText.match(/标题：(.+)/);
         const keywordMatch = responseText.match(/关键景点：(.+)/);
         
-        // 提取完整的规划内容（从推荐景点到关键景点之间的所有内容）
-        const planMatch = responseText.match(/📍 推荐景点：([\s\S]*?)关键景点：/);
+        // 提取完整的规划内容
+        let planContent = "";
+        if (responseText.includes("📍 推荐景点：")) {
+          const planMatch = responseText.match(/📍 推荐景点：([\s\S]*?)(?=关键景点：|$)/);
+          planContent = planMatch?.[1]?.trim() || "";
+        } else {
+          // 如果没有标准格式，提取标题后的所有内容作为规划内容
+          planContent = responseText.replace(/标题：[^\n]*\n?/, '').replace(/关键景点：[^\n]*/, '').trim();
+        }
         
         planTitle = titleMatch?.[1]?.trim() || "旅游行程规划";
-        planText = planMatch?.[1]?.trim() || responseText.replace(/标题：[^\n]*\n/, '').replace(/关键景点：[^\n]*/, '').trim();
+        planText = planContent || responseText;
         const keywordText = keywordMatch?.[1]?.trim() || "";
         
-        keywords = keywordText
-          .split(/[,，、\n]/)
-          .map(k => k.trim())
-          .filter(k => k.length > 0 && k.length < 50)
-          .slice(0, 10);
+        // 改进关键词提取逻辑
+        if (keywordText) {
+          keywords = keywordText
+            .split(/[,，、\n]/)
+            .map(k => k.trim())
+            .filter(k => k.length > 0 && k.length < 50)
+            .slice(0, 15); // 增加到15个关键词
+        } else {
+          // 如果没有关键景点，尝试从规划内容中提取景点名称
+          const poiPatterns = [
+            /([^\n，。！？]{2,8}公园)/g,
+            /([^\n，。！？]{2,8}寺)/g,
+            /([^\n，。！？]{2,8}山)/g,
+            /([^\n，。！？]{2,8}湖)/g,
+            /([^\n，。！？]{2,8}宫)/g,
+            /([^\n，。！？]{2,8}庙)/g,
+            /([^\n，。！？]{2,8}博物馆)/g,
+            /([^\n，。！？]{2,8}广场)/g,
+            /([^\n，。！？]{2,8}门)/g,
+            /([^\n，。！？]{2,8}街)/g
+          ];
+          
+          const extractedKeywords = new Set<string>();
+          poiPatterns.forEach(pattern => {
+            const matches = planText.match(pattern);
+            if (matches) {
+              matches.forEach(match => {
+                if (match.length >= 2 && match.length <= 8) {
+                  extractedKeywords.add(match);
+                }
+              });
+            }
+          });
+          
+          keywords = Array.from(extractedKeywords).slice(0, 15);
+        }
           
         console.log("解析的关键词:", keywords);
         console.log("原始关键词文本:", keywordText);
+        console.log("提取的规划内容长度:", planContent.length);
       }
       
       console.log("解析的关键词:", keywords);
       
-      // 清理文本中的markdown格式
+      // 清理文本中的代码格式
       const cleanedTitle = cleanMarkdown(planTitle);
       const cleanedDescription = cleanMarkdown(planText);
       
@@ -480,96 +591,144 @@ export async function POST(req: NextRequest) {
           await delay(200); // 增加延迟，避免并发QPS超限
         }
         
-        // 对于特殊景点名称，尝试多种搜索策略
-        let pois = await searchPOI(keyword, searchCity);
-        console.log(`${keyword} 搜索结果: ${pois.length} 个POI`);
+        // 优先级搜索策略：先尝试带城市前缀的精确搜索
+        let allPois: any[] = [];
+        let bestPoi = null;
         
-        // 如果搜索结果为空或没有匹配城市的结果，尝试带城市前缀的搜索
         if (searchCity) {
-          const hasMatchingCity = pois.some(poi => 
-            poi.cityname?.includes(searchCity) || 
-            poi.address?.includes(searchCity) ||
-            poi.cityname?.includes(searchCity.replace('市', '')) ||
-            poi.address?.includes(searchCity.replace('市', ''))
-          );
+          // 策癑1：带城市前缀的精确搜索
+          console.log(`策癑1: 城市前缀搜索 - ${searchCity}${keyword}`);
+          const cityPrefixPois = await searchPOI(`${searchCity}${keyword}`, searchCity);
+          console.log(`城市前缀搜索结果: ${cityPrefixPois.length} 个POI`);
           
-          if (!hasMatchingCity) {
-            await delay(100);
-            console.log(`尝试带城市前缀搜索: ${searchCity}${keyword}`);
-            const cityPrefixPois = await searchPOI(`${searchCity}${keyword}`, searchCity);
-            console.log(`城市前缀搜索结果: ${cityPrefixPois.length} 个POI`);
+          if (cityPrefixPois.length > 0) {
+            allPois = [...allPois, ...cityPrefixPois.map(poi => ({ ...poi, searchType: 'cityPrefix', score: 100 }))];
+          }
+          
+          await delay(150);
+          
+          // 策癑2：常规搜索但严格过滤
+          console.log(`策癑2: 常规搜索 - ${keyword}`);
+          const regularPois = await searchPOI(keyword, searchCity);
+          console.log(`常规搜索结果: ${regularPois.length} 个POI`);
+          
+          if (regularPois.length > 0) {
+            allPois = [...allPois, ...regularPois.map(poi => ({ ...poi, searchType: 'regular', score: 50 }))];
+          }
+        } else {
+          // 如果没有指定城市，只做常规搜索
+          const regularPois = await searchPOI(keyword);
+          allPois = [...allPois, ...regularPois.map(poi => ({ ...poi, searchType: 'regular', score: 50 }))];
+        }
+        
+        console.log(`合并后总共 ${allPois.length} 个POI候选`);
+        
+        // 严格预过滤：只保留匹配城市的POI
+        if (searchCity && allPois.length > 0) {
+          const filteredPois = allPois.filter(poi => {
+            const cityName = poi.cityname || '';
+            const address = poi.address || '';
             
-            // 如果带城市前缀的搜索有结果，优先使用
-            if (cityPrefixPois.length > 0) {
-              pois = cityPrefixPois;
+            // 精确匹配城市名
+            if (cityName.includes(searchCity) || address.includes(searchCity)) {
+              poi.score += 50; // 精确匹配加分
+              return true;
             }
+            
+            // 处理特殊情况：如“丹东市”匹配“丹东”
+            if (searchCity.endsWith('市')) {
+              const cityShort = searchCity.slice(0, -1);
+              if (cityName.includes(cityShort) || address.includes(cityShort)) {
+                poi.score += 30; // 略低的匹配分数
+                return true;
+              }
+            } else {
+              const cityWithSuffix = searchCity + '市';
+              if (cityName.includes(cityWithSuffix) || address.includes(cityWithSuffix)) {
+                poi.score += 30;
+                return true;
+              }
+            }
+            
+            // 特殊处理：东北地区的省份匹配
+            if (['辽宁', '吉林', '黑龙江'].includes(searchCity)) {
+              const provinceShort = searchCity.replace('省', '');
+              if (cityName.includes(provinceShort) || address.includes(provinceShort)) {
+                poi.score += 20;
+                return true;
+              }
+            }
+            
+            console.log(`✗ 过滤掉不匹配的POI: ${poi.name} (城市: ${cityName}, 地址: ${address})`);
+            return false;
+          });
+          
+          console.log(`预过滤后: ${filteredPois.length}/${allPois.length} 个POI符合 ${searchCity} 地区要求`);
+          allPois = filteredPois;
+        }
+        
+        // 智能评分排序：按照精确度排序
+        if (allPois.length > 0) {
+          // 额外的评分标准
+          allPois.forEach(poi => {
+            // 关键词匹配度加分
+            if (poi.name.includes(keyword)) {
+              poi.score += 40; // 名称包含关键词
+            }
+            
+            // 类型匹配加分
+            const touristTypes = ['景区', '公园', '寺', '庙', '山', '湖', '河', '博物馆', '纪念馆', '广场', '古迹'];
+            if (touristTypes.some(type => poi.type?.includes(type) || poi.name.includes(type))) {
+              poi.score += 20; // 旅游相关类型加分
+            }
+            
+            console.log(`POI评分: ${poi.name} = ${poi.score}分 (城市: ${poi.cityname}, 搜索类型: ${poi.searchType})`);
+          });
+          
+          // 按照评分排序，选择最优结果
+          allPois.sort((a, b) => b.score - a.score);
+          bestPoi = allPois[0];
+          
+          console.log(`✓ 最优POI: ${bestPoi.name} (评分: ${bestPoi.score}, 城市: ${bestPoi.cityname}, 搜索方式: ${bestPoi.searchType})`);
+        }
+        
+        // 多重验证机制：最终验证是否符合要求
+        if (bestPoi && searchCity) {
+          const cityName = bestPoi.cityname || '';
+          const address = bestPoi.address || '';
+          
+          const isCityMatch = cityName.includes(searchCity) || 
+                             address.includes(searchCity) ||
+                             cityName.includes(searchCity.replace('市', '')) ||
+                             address.includes(searchCity.replace('市', '')) ||
+                             (searchCity.endsWith('市') && 
+                              (cityName.includes(searchCity.slice(0, -1)) || address.includes(searchCity.slice(0, -1))));
+          
+          if (!isCityMatch) {
+            console.log(`❌ 最终验证失败: ${bestPoi.name} 不属于 ${searchCity} 地区`);
+            console.log(`POI城市: ${cityName}, POI地址: ${address}`);
+            continue; // 零容忍策略：直接跳过
           }
         }
         
-        if (pois.length > 0) {
-          // 如果用户指定了特定地区，严格匹配该地区的POI
-          let selectedPoi = null;
+        // 只有找到匹配的POI才处理
+        if (bestPoi) {
+          const location = parseLocation(bestPoi.location);
           
-          if (searchCity) {
-            // 严格寻找城市名匹配的POI，支持多种匹配方式
-            const cityMatchPoi = pois.find(poi => {
-              const cityName = poi.cityname || '';
-              const address = poi.address || '';
-              
-              // 精确匹配城市名
-              if (cityName.includes(searchCity) || address.includes(searchCity)) {
-                return true;
-              }
-              
-              // 处理特殊情况：如"南京市"匹配"南京"
-              if (searchCity.endsWith('市')) {
-                const cityShort = searchCity.slice(0, -1);
-                if (cityName.includes(cityShort) || address.includes(cityShort)) {
-                  return true;
-                }
-              } else {
-                const cityWithSuffix = searchCity + '市';
-                if (cityName.includes(cityWithSuffix) || address.includes(cityWithSuffix)) {
-                  return true;
-                }
-              }
-              
-              return false;
+          if (location) {
+            console.log(`${bestPoi.name} 坐标来源: location字段`, location);
+            const cleanedName = cleanPOIName(bestPoi.name);
+            results.push({
+              name: cleanedName,
+              city: bestPoi.cityname || searchCity,
+              address: bestPoi.address,
+              lat: location.lat,
+              lng: location.lng,
             });
-            
-            if (cityMatchPoi) {
-              selectedPoi = cityMatchPoi;
-              console.log(`✅ 为 ${keyword} 选择了城市匹配的POI: ${selectedPoi.name} (${selectedPoi.cityname})`);
-            } else {
-              console.log(`❌ ${keyword} 没有找到 ${searchCity} 地区的POI，跳过此关键词`);
-              console.log(`可用POI城市: ${pois.map(p => p.cityname).join(', ')}`);
-              continue; // 跳过不匹配城市的POI
-            }
-          } else {
-            selectedPoi = pois[0]; // 如果没有指定城市，使用第一个结果
-          }
-          
-          // 只有找到匹配的POI才处理
-          if (selectedPoi) {
-            const location = parseLocation(selectedPoi.location);
-            
-            if (location) {
-              console.log(`${selectedPoi.name} 坐标来源: location字段`, location);
-              const cleanedName = cleanPOIName(selectedPoi.name);
-              results.push({
-                name: cleanedName,
-                city: selectedPoi.cityname || searchCity,
-                address: selectedPoi.address,
-                lat: location.lat,
-                lng: location.lng,
-              });
-              console.log(`添加POI: ${cleanedName} (原名: ${selectedPoi.name}) (${selectedPoi.cityname})`, { lat: location.lat, lng: location.lng });
-            }
+            console.log(`✓ 添加POI: ${cleanedName} (原名: ${bestPoi.name}) (城市: ${bestPoi.cityname}), 评分: ${bestPoi.score}`);
           }
         } else {
-          console.log(`⚠️ 关键词 "${keyword}" 最终没有找到有效POI`);
-          console.log(`搜索城市: ${searchCity}`);
-          console.log(`已找到的POI数量: ${results.length}`);
+          console.log(`⚠️ 关键词 "${keyword}" 最终没有找到在 ${searchCity} 地区的有效POI`);
         }
         
       } catch (error) {

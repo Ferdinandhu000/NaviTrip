@@ -28,7 +28,7 @@ type AMapNamespace = {
   Bounds: new () => { extend: (pos: LngLat) => void };
   InfoWindow: new (options: { content: string; offset?: unknown }) => unknown;
   Pixel: new (x: number, y: number) => unknown;
-  Polyline: new (options: { path: LngLat[]; strokeColor?: string; strokeWeight?: number; strokeOpacity?: number }) => unknown;
+  Polyline: new (options: { path: LngLat[]; strokeColor?: string; strokeWeight?: number; strokeOpacity?: number; strokeStyle?: string }) => unknown;
   Icon: new (options: { image: string; size: [number, number]; imageSize: [number, number] }) => unknown;
   Driving: new (options?: { policy?: number }) => {
     search: (start: LngLat, end: LngLat, callback: (status: string, result: unknown) => void) => void;
@@ -53,6 +53,57 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
   const overlaysRef = useRef<unknown[] | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 生成自然路径的辅助函数
+  const generateNaturalPath = (start: LngLat, end: LngLat, index: number = 0): LngLat[] => {
+    const [startLng, startLat] = start;
+    const [endLng, endLat] = end;
+    
+    // 计算距离和方向
+    const deltaLng = endLng - startLng;
+    const deltaLat = endLat - startLat;
+    const distance = Math.sqrt(deltaLng * deltaLng + deltaLat * deltaLat);
+    
+    // 如果距离很短，使用直线
+    if (distance < 0.005) {
+      return [start, end];
+    }
+    
+    // 生成更自然的路径点
+    const path: LngLat[] = [start];
+    const segments = Math.max(3, Math.floor(distance * 500)); // 根据距离动态调整段数
+    
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      
+      // 基础插值
+      let lng = startLng + deltaLng * t;
+      let lat = startLat + deltaLat * t;
+      
+      // 添加自然的偏移，模拟道路走向
+      const offsetFactor = Math.sin(t * Math.PI) * Math.min(distance * 0.1, 0.005);
+      
+      // 根据索引交替偏移方向，避免重叠
+      const direction = (index % 2 === 0) ? 1 : -1;
+      
+      // 垂直于主方向的偏移
+      const perpLng = -deltaLat / distance * offsetFactor * direction;
+      const perpLat = deltaLng / distance * offsetFactor * direction;
+      
+      lng += perpLng;
+      lat += perpLat;
+      
+      // 添加小幅随机波动，使路径更自然
+      const noise = 0.0002;
+      lng += (Math.random() - 0.5) * noise;
+      lat += (Math.random() - 0.5) * noise;
+      
+      path.push([lng, lat]);
+    }
+    
+    path.push(end);
+    return path;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -270,6 +321,29 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       bounds.extend([m.longitude, m.latitude]);
     });
 
+    // 创建路线连接（当有多个点时）
+    if (debouncedMarkers.length > 1) {
+      // 为每两个相邻的点创建弯曲路线
+      for (let i = 0; i < debouncedMarkers.length - 1; i++) {
+        const startPoint: LngLat = [debouncedMarkers[i].longitude, debouncedMarkers[i].latitude];
+        const endPoint: LngLat = [debouncedMarkers[i + 1].longitude, debouncedMarkers[i + 1].latitude];
+        
+        // 生成自然路径
+        const naturalPath = generateNaturalPath(startPoint, endPoint, i);
+        
+        // 创建简洁的路线（细一点、淡一点）
+        const polyline = new AMap.Polyline({
+          path: naturalPath,
+          strokeColor: '#3b82f6',
+          strokeWeight: 2,
+          strokeOpacity: 0.6,
+          strokeStyle: 'dashed'
+        });
+        
+        created.push(polyline);
+      }
+    }
+
 
 
     map.add(created);
@@ -308,7 +382,7 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       {/* 地图加载提示 */}
       {isLoading && (
         <div className="absolute inset-0 bg-transparent flex items-center justify-center">
-          <div className="text-center bg-base-100/90 backdrop-blur-sm rounded-lg p-4">
+          <div className="text-center bg-base-100/90 dark:bg-slate-600/90 backdrop-blur-sm rounded-lg p-4">
             <span className="loading loading-spinner loading-lg text-primary mb-4"></span>
             <p className="text-base-content/70 text-sm">地图加载中...</p>
           </div>
@@ -318,7 +392,7 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       {/* 地图加载错误 */}
       {mapError && (
         <div className="absolute inset-0 bg-transparent flex items-center justify-center p-6">
-          <div className="text-center max-w-md bg-base-100/95 backdrop-blur-sm rounded-lg p-6">
+          <div className="text-center max-w-md bg-base-100/95 dark:bg-slate-600/95 backdrop-blur-sm rounded-lg p-6">
             <div className="avatar mb-4">
               <div className="w-16 rounded-full bg-error/20 flex items-center justify-center">
                 <svg className="w-8 h-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -370,7 +444,7 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       
       {/* 标记点数量和路线提示 */}
       {markers.length > 0 && mapInstance.current && (
-        <div className="absolute top-3 left-3 bg-base-100/90 backdrop-blur-sm shadow-md border border-base-300/50 rounded-lg px-3 py-2">
+        <div className="absolute top-3 left-3 bg-base-100/90 dark:bg-slate-600/90 backdrop-blur-sm shadow-md border border-base-300/50 dark:border-slate-500/50 rounded-lg px-3 py-2">
           <div className="flex items-center gap-2 text-xs">
             <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
             <span className="font-medium">{markers.length} 个地点</span>
@@ -386,7 +460,7 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
       
       {/* 地图控制提示 */}
       {mapInstance.current && (
-        <div className="absolute bottom-3 right-3 bg-base-100/90 backdrop-blur-sm shadow-md border border-base-300/50 rounded-lg px-3 py-2">
+        <div className="absolute bottom-3 right-3 bg-base-100/90 dark:bg-slate-600/90 backdrop-blur-sm shadow-md border border-base-300/50 dark:border-slate-500/50 rounded-lg px-3 py-2">
           <div className="text-xs space-y-1.5">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
@@ -402,6 +476,14 @@ export default function Map({ markers, className, mapStyleId = "amap://styles/no
                 <span>终点</span>
               </div>
             </div>
+            {markers.length > 1 && (
+              <div className="flex items-center gap-2 pt-1 border-t border-base-300/30 dark:border-slate-500/30">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-0.5 bg-info opacity-80" style={{borderTop: '2px dashed #3b82f6'}}></div>
+                  <span>游览路线</span>
+                </div>
+              </div>
+            )}
             <div className="opacity-70 text-[10px]">滚轮缩放 · 拖拽移动 · 点击查看详情</div>
           </div>
         </div>

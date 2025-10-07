@@ -9,79 +9,10 @@ const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 
 export default function Home() {
   const [markers, setMarkers] = useState<Array<{ id: string; title: string; subtitle?: string; latitude: number; longitude: number }>>([]);
-  const [styleId, setStyleId] = useState<string>("amap://styles/normal");
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const [iconTop, setIconTop] = useState(20);
-  const isIconDragging = useRef(false);
-  const iconDragOffset = useRef(0);
 
-  // 监听主题变化，自动切换地图样式
-  useEffect(() => {
-    const updateMapStyle = () => {
-      const theme = document.documentElement.getAttribute("data-theme") || "light";
-      const newStyle = theme === "dark" ? "amap://styles/darkblue" : "amap://styles/normal";
-      setStyleId(newStyle);
-    };
-
-    // 初始设置
-    updateMapStyle();
-
-    // 监听主题变化
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-          updateMapStyle();
-        }
-      });
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme']
-    });
-
-    return () => observer.disconnect();
-  }, []);
-  
-  // 处理折叠后的对话框图标拖动
-  const handleIconMouseDown = (e: React.MouseEvent) => {
-    isIconDragging.current = true;
-    iconDragOffset.current = e.clientY - iconTop;
-    
-    e.preventDefault();
-  };
-  
-  const handleIconMouseMove = (e: MouseEvent) => {
-    if (!isIconDragging.current) return;
-    
-    const newY = e.clientY - iconDragOffset.current;
-    const viewportHeight = window.innerHeight;
-    
-    // 限制在垂直方向上拖动，并且不能超出视窗范围
-    const boundedY = Math.max(24, Math.min(newY, viewportHeight - 72));
-    
-    setIconTop(boundedY);
-    
-    e.preventDefault();
-  };
-  
-  const handleIconMouseUp = (e: MouseEvent) => {
-    if (!isIconDragging.current) return;
-    
-    isIconDragging.current = false;
-    
-    e.preventDefault();
-  };
-  
-  useEffect(() => {
-    document.addEventListener('mousemove', handleIconMouseMove);
-    document.addEventListener('mouseup', handleIconMouseUp);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleIconMouseMove);
-      document.removeEventListener('mouseup', handleIconMouseUp);
-    };
-  }, []);
+  // 统一使用标准地图样式
+  const mapStyleId = "amap://styles/normal";
 
   return (
     <div className="h-screen flex flex-col app-background">
@@ -106,7 +37,7 @@ export default function Home() {
               <h1 className="text-2xl font-bold leading-tight">
                 <span className="bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">NaviTrip</span>
               </h1>
-              <p className="text-lg text-gray-900 dark:text-gray-100 font-normal">智能旅游规划助手</p>
+              <p className="text-lg text-gray-900 dark:text-white font-normal">智能旅游规划助手</p>
             </div>
           </div>
         </div>
@@ -125,66 +56,77 @@ export default function Home() {
           <div className="relative h-full bg-base-100/30 backdrop-blur-sm rounded-2xl lg:rounded-3xl shadow-lg overflow-hidden transition-all duration-300">
             <Map 
               markers={markers} 
-              mapStyleId={styleId} 
+              mapStyleId={mapStyleId} 
               className="w-full h-full min-h-[250px] sm:min-h-[300px] lg:min-h-[400px] rounded-2xl lg:rounded-3xl" 
             />
           </div>
         </section>
         
-        {/* 右侧聊天区域 - 可折叠设计 */}
-        {isChatOpen ? (
-          <section className="w-full lg:w-[400px] xl:w-[420px] relative group flex-shrink-0 chat-container" aria-label="AI 旅游助手对话区域">
+        {/* 右侧聊天区域 - 滑动折叠设计 */}
+        <section className={`relative flex-shrink-0 chat-container transition-all duration-300 ease-out overflow-hidden ${
+          isChatOpen 
+            ? 'w-full lg:w-[400px] xl:w-[420px]' 
+            : 'w-0 lg:w-0'
+        }`} aria-label="AI 旅游助手对话区域">
+          <div className={`w-[400px] xl:w-[420px] h-full relative group transition-all duration-300 ease-out ${
+            isChatOpen 
+              ? 'translate-x-0 opacity-100' 
+              : 'translate-x-full opacity-0'
+          }`}>
             <div className="absolute inset-0 bg-gradient-to-br from-purple-600/5 to-purple-500/5 rounded-2xl lg:rounded-3xl"></div>
-            <div className="relative h-full bg-base-100/40 backdrop-blur-lg rounded-2xl lg:rounded-3xl shadow-lg overflow-hidden transition-all duration-300">
-              {/* 添加折叠按钮 */}
-              <div className="absolute top-2 left-2 z-10 group">
+            <div className="relative h-full bg-base-100/40 backdrop-blur-lg rounded-2xl lg:rounded-3xl shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden">
+              {/* 折叠按钮 - 重新设计 */}
+              <div className="absolute top-4 left-4 z-20">
                 <button 
                   onClick={() => setIsChatOpen(false)}
-                  className="btn btn-xs btn-circle btn-ghost text-base-content/70 hover:text-base-content hover:bg-base-100/50 transition-all duration-200"
-                  aria-label="折叠聊天窗口"
+                  className="group/btn flex items-center gap-2 bg-gradient-to-r from-purple-500/10 to-purple-600/10 hover:from-purple-500/20 hover:to-purple-600/20 border border-purple-200/30 dark:border-purple-700/30 rounded-xl px-3 py-2 transition-all duration-200 hover:shadow-md backdrop-blur-sm hover:scale-105 active:scale-95"
+                  aria-label="隐藏聊天窗口"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  <svg className="w-4 h-4 text-purple-600 dark:text-purple-400 transition-transform duration-200 group-hover/btn:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
+                  <span className="text-xs font-medium text-purple-600 dark:text-purple-400 group-hover/btn:text-purple-700 dark:group-hover/btn:text-purple-300 transition-colors duration-200">隐藏</span>
                 </button>
-                {/* 自定义Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-base-300/90 text-base-content text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap backdrop-blur-sm">
-                  点击折叠聊天窗口
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-base-300/90"></div>
-                </div>
               </div>
 
               <Chat onMarkers={setMarkers} />
             </div>
-          </section>
-        ) : null}
+          </div>
+        </section>
       </main>
       
-      {/* 折叠后的对话框图标 - 可拖动 */}
+      {/* 折叠后的展开按钮 - 固定在右侧边缘 */}
       {!isChatOpen && (
-        <div 
-          className="fixed right-4 bg-base-100/90 backdrop-blur-lg shadow-lg rounded-2xl p-3 cursor-grab border border-base-300/50 hover:shadow-xl transition-all duration-300 z-50 flex items-center justify-center group"
-          style={{ 
-            top: `${iconTop}px`,
-            cursor: 'grab',
-            userSelect: 'none'
-          }}
-          onMouseDown={handleIconMouseDown}
-          onClick={() => setIsChatOpen(true)}
-          aria-label="打开聊天窗口"
-        >
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span className="text-sm font-medium text-base-content hidden sm:block mr-1">AI助手</span>
-          </div>
-          
-          {/* 悬停提示 */}
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-base-300/90 text-base-content text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap backdrop-blur-sm">
-            点击打开聊天窗口
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-base-300/90"></div>
-          </div>
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50">
+          <button
+            onClick={() => setIsChatOpen(true)}
+            className="group/expand bg-purple-400 hover:bg-purple-500 text-white rounded-l-2xl pl-3 pr-4 py-6 transition-colors duration-200 hover:pr-5"
+            aria-label="展开聊天窗口"
+            style={{
+              boxShadow: 'none',
+              border: 'none',
+              outline: 'none'
+            }}
+          >
+            <div className="flex flex-col items-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              
+              {/* AI文字横向排列，助手垂直排列 */}
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-0">
+                  <span className="text-xs font-medium">A</span>
+                  <span className="text-xs font-medium">I</span>
+                </div>
+                <span className="text-xs font-medium">助</span>
+                <span className="text-xs font-medium">手</span>
+              </div>
+              
+              {/* 状态指示器 */}
+              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+            </div>
+          </button>
         </div>
       )}
     </div>

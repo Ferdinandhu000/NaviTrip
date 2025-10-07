@@ -30,8 +30,8 @@ export function createOpenAIClient(): OpenAI {
   return new OpenAI({ 
     apiKey, 
     baseURL: finalBaseURL,
-    timeout: 120000, // 增加到120秒超时
-    maxRetries: 2   // 最多重试2次
+    timeout: 180000, // 增加到180秒超时，支持更详细的回复
+    maxRetries: 3   // 增加到最多重试3次
   });
 }
 
