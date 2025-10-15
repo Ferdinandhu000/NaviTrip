@@ -3,6 +3,309 @@ import { z } from "zod";
 import { createOpenAIClient, getDefaultModel } from "@/lib/ai";
 import { searchPOI, parseLocation } from "@/lib/amap-server";
 
+type RegionLevel = 'province' | 'city';
+
+type RegionMatch = {
+  raw: string;
+  name: string;
+  level: RegionLevel;
+};
+
+type FollowUpSuggestion = {
+  label: string;
+  prompt: string;
+};
+
+const MUNICIPALITIES = new Set(['北京市', '天津市', '上海市', '重庆市']);
+const MUNICIPALITY_SHORT_NAMES = new Set(['北京', '天津', '上海', '重庆']);
+
+const PROVINCE_NORMALIZATION: Record<string, string> = {
+  '北京': '北京市',
+  '北京市': '北京市',
+  '天津': '天津市',
+  '天津市': '天津市',
+  '上海': '上海市',
+  '上海市': '上海市',
+  '重庆': '重庆市',
+  '重庆市': '重庆市',
+  '内蒙古': '内蒙古自治区',
+  '内蒙古自治区': '内蒙古自治区',
+  '广西': '广西壮族自治区',
+  '广西壮族自治区': '广西壮族自治区',
+  '西藏': '西藏自治区',
+  '西藏自治区': '西藏自治区',
+  '宁夏': '宁夏回族自治区',
+  '宁夏回族自治区': '宁夏回族自治区',
+  '新疆': '新疆维吾尔自治区',
+  '新疆维吾尔自治区': '新疆维吾尔自治区',
+  '香港': '香港特别行政区',
+  '香港特别行政区': '香港特别行政区',
+  '澳门': '澳门特别行政区',
+  '澳门特别行政区': '澳门特别行政区',
+  '台湾': '台湾省',
+  '台湾省': '台湾省',
+};
+
+const PROVINCE_SHORT_NAMES = new Set([
+  '河北', '山西', '辽宁', '吉林', '黑龙江', '江苏', '浙江', '安徽', '福建', '江西', '山东',
+  '河南', '湖北', '湖南', '广东', '海南', '四川', '贵州', '云南', '陕西', '甘肃', '青海',
+  '内蒙古', '广西', '西藏', '宁夏', '新疆', '香港', '澳门', '台湾'
+]);
+
+const PROVINCE_CAPITALS: Record<string, string> = {
+  '河北省': '石家庄',
+  '山西省': '太原',
+  '辽宁省': '沈阳',
+  '吉林省': '长春',
+  '黑龙江省': '哈尔滨',
+  '江苏省': '南京',
+  '浙江省': '杭州',
+  '安徽省': '合肥',
+  '福建省': '福州',
+  '江西省': '南昌',
+  '山东省': '济南',
+  '河南省': '郑州',
+  '湖北省': '武汉',
+  '湖南省': '长沙',
+  '广东省': '广州',
+  '海南省': '海口',
+  '四川省': '成都',
+  '贵州省': '贵阳',
+  '云南省': '昆明',
+  '陕西省': '西安',
+  '甘肃省': '兰州',
+  '青海省': '西宁',
+  '内蒙古自治区': '呼和浩特',
+  '广西壮族自治区': '南宁',
+  '西藏自治区': '拉萨',
+  '宁夏回族自治区': '银川',
+  '新疆维吾尔自治区': '乌鲁木齐',
+  '台湾省': '台北',
+  '香港特别行政区': '香港',
+  '澳门特别行政区': '澳门',
+};
+
+const PROVINCE_CITY_SUGGESTIONS: Record<string, Array<{ city: string; reason: string }>> = {
+  '河南省': [
+    { city: '郑州', reason: '省会交通枢纽，可方便往返嵩山少林寺与黄河风景区' },
+    { city: '洛阳', reason: '龙门石窟、洛邑古城等世界文化遗产集中' },
+    { city: '开封', reason: '宋韵文化浓厚，清明上河园等夜游体验丰富' },
+  ],
+  '山东省': [
+    { city: '济南', reason: '泉城风貌独特，大明湖与千佛山组合轻松游' },
+    { city: '青岛', reason: '海滨城市，德式建筑与海鲜美食非常适合度假' },
+    { city: '烟台', reason: '海岸线优美，可串联蓬莱阁等景点' },
+  ],
+  '浙江省': [
+    { city: '杭州', reason: '西湖、灵隐寺等经典景点，适合慢节奏城市漫游' },
+    { city: '宁波', reason: '港城风貌与东钱湖湿地资源兼具' },
+    { city: '绍兴', reason: '鲁迅故里、水乡古镇体验原汁原味' },
+  ],
+  '江苏省': [
+    { city: '南京', reason: '民国与六朝文化交织，城市景点覆盖面广' },
+    { city: '苏州', reason: '园林世界遗产集中，拙政园、留园皆在市区内' },
+    { city: '无锡', reason: '太湖风光宜人，可联游灵山大佛与拈花湾' },
+  ],
+  '广东省': [
+    { city: '广州', reason: '岭南饮食与历史地标最集中，交通便捷' },
+    { city: '深圳', reason: '现代都市体验丰富，适合亲子与主题乐园路线' },
+    { city: '潮州', reason: '潮汕美食文化与古城风貌独特' },
+  ],
+  '四川省': [
+    { city: '成都', reason: '美食、休闲与周边景区衔接最顺畅' },
+    { city: '乐山', reason: '乐山大佛与峨眉山可在两日内打卡' },
+    { city: '九寨沟', reason: '自然风光典型，适合深度自然主题行程' },
+  ],
+  '云南省': [
+    { city: '昆明', reason: '春城四季如春，石林等景点距离适中' },
+    { city: '大理', reason: '洱海与苍山构成经典慢旅行体验' },
+    { city: '丽江', reason: '古城文化与玉龙雪山，自然与人文兼顾' },
+  ],
+  '海南省': [
+    { city: '海口', reason: '进出岛交通最便捷，适合短途休闲' },
+    { city: '三亚', reason: '度假酒店与海滩资源最丰富，适合海岛度假' },
+    { city: '万宁', reason: '冲浪与轻户外体验热门，节奏更松弛' },
+  ],
+  '福建省': [
+    { city: '厦门', reason: '鼓浪屿、曾厝垵等经典路线紧凑好逛' },
+    { city: '泉州', reason: '海丝文化遗迹集中，适合历史主题旅行' },
+    { city: '武夷山', reason: '世界自然与文化双遗产，适合生态主题行程' },
+  ],
+  '陕西省': [
+    { city: '西安', reason: '兵马俑、城墙、博物馆等重磅景点集中' },
+    { city: '延安', reason: '红色文化与黄土高原风貌鲜明' },
+    { city: '汉中', reason: '三国文化与油菜花季出片景色兼备' },
+  ],
+};
+
+const DEFAULT_CITY_SUGGESTIONS: Array<{ city: string; reason: string }> = [
+  { city: '北京', reason: '历史地标与博物馆资源丰富，适合首访中国的旅行者' },
+  { city: '上海', reason: '现代都市与海派文化交织，餐饮娱乐选择最多' },
+  { city: '杭州', reason: '“上有天堂，下有苏杭”，自然与人文景观兼具' },
+  { city: '成都', reason: '休闲城市节奏，川菜与熊猫基地广受欢迎' },
+  { city: '西安', reason: '十三朝古都，体验中华文明源头最直接' },
+];
+
+function normalizeProvinceName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  if (PROVINCE_NORMALIZATION[trimmed]) {
+    return PROVINCE_NORMALIZATION[trimmed];
+  }
+  if (trimmed.endsWith('省') || trimmed.endsWith('自治区') || trimmed.endsWith('特别行政区')) {
+    return trimmed;
+  }
+  return `${trimmed}省`;
+}
+
+function createRegionMatch(raw: string, level: RegionLevel): RegionMatch {
+  const cleaned = raw.trim();
+  if (level === 'province') {
+    return {
+      raw: cleaned,
+      name: normalizeProvinceName(cleaned),
+      level,
+    };
+  }
+  const normalizedCity = cleaned.endsWith('市') ? cleaned.slice(0, -1) : cleaned;
+  return {
+    raw: cleaned,
+    name: normalizedCity,
+    level,
+  };
+}
+
+function inferRegionLevel(text: string): RegionLevel {
+  const trimmed = text.trim();
+  if (!trimmed) return 'city';
+  if (MUNICIPALITIES.has(trimmed) || MUNICIPALITY_SHORT_NAMES.has(trimmed)) {
+    return 'city';
+  }
+  if (trimmed.endsWith('省') || trimmed.endsWith('自治区') || trimmed.endsWith('特别行政区')) {
+    return 'province';
+  }
+  if (trimmed.endsWith('市') || trimmed.endsWith('州') || trimmed.endsWith('盟') || trimmed.endsWith('地区')) {
+    return 'city';
+  }
+  if (PROVINCE_SHORT_NAMES.has(trimmed)) {
+    return 'province';
+  }
+  return 'city';
+}
+
+function pickBestScope(candidates: RegionMatch[]): RegionMatch | undefined {
+  if (!candidates.length) return undefined;
+  const cityMatch = candidates.find(candidate => candidate.level === 'city');
+  return cityMatch ?? candidates[0];
+}
+
+function sanitizeCityName(name: string): string {
+  let cleaned = name.trim();
+  // 去除常见的旅行语义后缀，避免出现“洛阳游/之旅”等
+  cleaned = cleaned.replace(/(之旅|游玩|旅游|旅行|玩|游)$/g, '');
+  // 标准化去除“市”以便匹配
+  if (cleaned.endsWith('市')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+  return cleaned;
+}
+
+/**
+ * 使用AI从自然语言中抽取省/市级别目的地
+ * 优先返回城市；无法确定时返回省份；失败返回undefined
+ */
+async function aiInferRegion(prompt: string): Promise<RegionMatch | undefined> {
+  try {
+    const openai = createOpenAIClient();
+    const model = getDefaultModel();
+    const system = [
+      '你是地名抽取助手，只从用户话语中抽取与出行目的地相关的中国大陆省或市。',
+      '规则：',
+      '1) 只返回中国大陆的地名；',
+      '2) 优先抽取城市，其次省份；仅返回一个最核心目的地；',
+      "3) 以严格JSON返回：{\"name\":\"地名\",\"level\":\"city|province\"}",
+      '4) 不要返回解释文本、不要Markdown、不要代码块。'
+    ].join('\n');
+    const user = `请从下面句子中抽取目的地：${prompt}`;
+
+    const resp = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 0,
+    }, { timeout: 8000 });
+
+    const text = resp.choices?.[0]?.message?.content?.trim() || '';
+    try {
+      const obj = JSON.parse(text) as { name?: string; level?: string };
+      if (obj?.name && (obj.level === 'city' || obj.level === 'province')) {
+        if (obj.level === 'city') {
+          return createRegionMatch(obj.name, 'city');
+        }
+        return createRegionMatch(normalizeProvinceName(obj.name), 'province');
+      }
+    } catch {
+      // 忽略JSON解析失败，回退到正则逻辑
+    }
+  } catch (e) {
+    // AI超时或错误时回退
+    console.log('AI地名抽取失败，回退到规则解析');
+  }
+  return undefined;
+}
+
+function createSuggestionPrompt(city: string): FollowUpSuggestion {
+  const label = city.endsWith('市') ? city : city;
+  return {
+    label,
+    prompt: `我想重点安排在${city}游玩，请以${city}为核心帮我规划详细行程`,
+  };
+}
+
+function buildGeneralClarification(): { message: string; suggestions: FollowUpSuggestion[] } {
+  const suggestionItems = DEFAULT_CITY_SUGGESTIONS.map(item => `${item.city}——${item.reason}`).map((text, index) => `${index + 1}. ${text}`);
+  const suggestions = DEFAULT_CITY_SUGGESTIONS.map(item => createSuggestionPrompt(item.city));
+  const message = [
+    '为了给出更精准的行程规划，请先明确要去的城市。',
+    '',
+    '可以参考以下热门城市：',
+    suggestionItems.join('\n'),
+    ''
+  ].join('\n');
+
+  return { message, suggestions };
+}
+
+function buildProvinceClarification(scope: RegionMatch): { message: string; suggestions: FollowUpSuggestion[] } {
+  const provinceName = normalizeProvinceName(scope.name);
+  const displayName = scope.raw || provinceName;
+  const defaultCity = PROVINCE_CAPITALS[provinceName];
+  const provinceSuggestions = PROVINCE_CITY_SUGGESTIONS[provinceName] ?? (defaultCity
+    ? [{ city: defaultCity, reason: '省会城市交通最方便，玩乐资源集中' }]
+    : []);
+
+  const suggestionTexts = provinceSuggestions.map((item, index) => `${index + 1}. ${item.city}——${item.reason}`);
+  const suggestions = provinceSuggestions.map(item => createSuggestionPrompt(item.city));
+
+  const messageParts = [
+    `当前范围为 ${displayName}，请先选择具体城市，以便为你生成更精确的行程安排。`,
+  ];
+
+  if (suggestionTexts.length) {
+    messageParts.push('', '可以优先考虑以下城市：', suggestionTexts.join('\n'));
+  } else if (defaultCity) {
+    messageParts.push('', `可以先从省会 ${defaultCity} 开始，市内景点丰富且交通衔接友好。`);
+    suggestions.push(createSuggestionPrompt(defaultCity));
+  }
+
+  return {
+    message: messageParts.join('\n'),
+    suggestions,
+  };
+}
+
 /**
  * 聊天消息类型
  */
@@ -142,79 +445,66 @@ function isInternationalTravel(prompt: string): boolean {
 /**
  * 从用户输入中提取省份或城市信息
  */
-function extractRegionFromPrompt(prompt: string): string | undefined {
-  // 特殊地区映射
-  const regionMappings: { [key: string]: string } = {
-    '长三角': '江苏',
-    '长江三角洲': '江苏', 
-    '珠三角': '广东',
-    '珠江三角洲': '广东',
-    '京津冀': '北京',
-    '环渤海': '北京',
-    '粤港澳': '广东',
-    '大湾区': '广东',
-    '东北': '辽宁',
-    '西北': '陕西',
-    '西南': '四川',
-    '华北': '北京',
-    '华东': '江苏',
-    '华南': '广东',
-    '华中': '湖北'
-  };
-  
-  // 先检查特殊地区
-  for (const [region, mappedProvince] of Object.entries(regionMappings)) {
-    if (prompt.includes(region)) {
-      console.log(`检测到特殊地区: ${region} -> ${mappedProvince}`);
-      return mappedProvince;
-    }
+function extractRegionFromPrompt(prompt: string): RegionMatch | undefined {
+  const text = prompt.replace(/\s+/g, '');
+
+  // 1) 直辖市（含简称）优先匹配
+  for (const full of MUNICIPALITIES) {
+    if (text.includes(full)) return createRegionMatch(full, 'city');
   }
-  
-  // 中国省份列表
-  const provinces = [
-    '北京', '天津', '上海', '重庆', '河北', '山西', '辽宁', '吉林', '黑龙江',
-    '江苏', '浙江', '安徽', '福建', '江西', '山东', '河南', '湖北', '湖南',
-    '广东', '广西', '海南', '四川', '贵州', '云南', '西藏', '陕西', '甘肃',
-    '青海', '宁夏', '新疆', '内蒙古', '台湾', '香港', '澳门'
+  for (const short of MUNICIPALITY_SHORT_NAMES) {
+    if (text.includes(short)) return createRegionMatch(short, 'city');
+  }
+
+  // 2) 明确的“X省/自治区/特别行政区”写法
+  const explicitProvinceMatch = text.match(/([\u4e00-\u9fa5]{2,8})(省|自治区|特别行政区)/);
+  if (explicitProvinceMatch) {
+    const raw = explicitProvinceMatch[0];
+    return createRegionMatch(raw, 'province');
+  }
+
+  // 2.5) 自然语言句式提取：在X游玩 / 以X为核心 / 去X玩 / 到X旅行 等
+  const naturalCityPatterns: RegExp[] = [
+    /在([\u4e00-\u9fa5]{2,8})(?:市)?(?:.*?)(?:游|玩|旅游|旅行)/, // 在洛阳游/玩/旅游/旅行
+    /以([\u4e00-\u9fa5]{2,8})(?:市)?为核心/,                 // 以洛阳为核心
+    /到([\u4e00-\u9fa5]{2,8})(?:市)?(?:.*?)(?:游|玩|旅游|旅行)/, // 到洛阳玩/旅行
+    /去([\u4e00-\u9fa5]{2,8})(?:市)?(?:.*?)(?:游|玩|旅游|旅行)/, // 去洛阳玩
   ];
-  
-  // 主要城市列表（扩展版，特别添加东北地区城市）
-  const cities = [
-    // 一线城市
-    '深圳', '广州',
-    // 新一线城市
-    '杭州', '南京', '苏州', '成都', '西安', '武汉', '长沙', '郑州', '无锡', '宁波',
-    // 二线城市
-    '济南', '青岛', '大连', '沈阳', '哈尔滨', '长春', '石家庄', '太原', '呼和浩特',
-    '南昌', '合肥', '福州', '厦门', '南宁', '海口', '昆明', '贵阳', '拉萨', '兰州',
-    '西宁', '银川', '乌鲁木齐', '温州', '佛山', '东莞', '泉州', '惠州', '嘉兴',
-    '烟台', '珠海', '镇江', '盐城', '金华', '台州', '绍兴', '湖州', '常州',
-    // 东北地区城市（重点添加）
-    '丹东', '键州', '本溪', '辽阳', '鸞山', '若山', '沈阳', '大连', '铁岭', '抚顺', '平顶山',
-    '长春', '吉林', '四平', '松原', '白城', '白山', '哈尔滨', '齐齐哈尔', '牧丹江', '佳木斯',
-    '鹤岗', '绥化', '东清', '绥化', '牡丹江', '佳木斯', '雙鸭山',
-    // 热门旅游城市
-    '桂林', '丽江', '大理', '三亚', '张家界', '九寨沟', '黄山', '泰山', '庐山',
-    '峨眉山', '普陀山', '五台山', '华山', '衡山', '恒山', '嵩山', '武当山',
-    '承德', '秦皇岛', '威海', '日照', '洛阳', '开封', '平遥', '凤凰', '阳朔'
-  ];
-  
-  // 先检查省份
-  for (const province of provinces) {
-    if (prompt.includes(province)) {
-      return province;
+  for (const pattern of naturalCityPatterns) {
+    const m = text.match(pattern);
+    if (m && m[1]) {
+      return createRegionMatch(m[1], 'city');
     }
   }
-  
-  // 再检查城市
-  for (const city of cities) {
-    if (prompt.includes(city)) {
-      return city;
+
+  // 3) 省份简称匹配（如“河南”“浙江”“新疆”）
+  for (const shortName of PROVINCE_SHORT_NAMES) {
+    if (text.includes(shortName)) {
+      // 统一成标准全称（如“河南省”“新疆维吾尔自治区”）
+      const normalized = PROVINCE_NORMALIZATION[shortName] || `${shortName}省`;
+      return createRegionMatch(normalized, 'province');
     }
   }
-  
+
+  // 4) 城市名：匹配类似“南京市”“南京”这样的写法
+  const cityWithSuffix = text.match(/([\u4e00-\u9fa5]{2,8})市/);
+  if (cityWithSuffix) {
+    return createRegionMatch(cityWithSuffix[0], 'city');
+  }
+  // 无“市”后缀但疑似城市（长度2-4的汉字串 搭配常见旅行词）
+  const cityCandidate = text.match(/([\u4e00-\u9fa5]{2,4})(之旅|旅游|旅行|玩|游|行|攻略|美食|景点)/);
+  if (cityCandidate) {
+    return createRegionMatch(cityCandidate[1], 'city');
+  }
+
+  // 4.5) 仅城市名本身（2-4个汉字，无任何后缀），用于“温州”“绍兴”等直接输入
+  if (/^[\u4e00-\u9fa5]{2,4}$/.test(text)) {
+    return createRegionMatch(text, 'city');
+  }
+
   return undefined;
 }
+
 
 /**
  * 从用户输入中提取基础关键词（AI失败时的降级处理）
@@ -268,48 +558,90 @@ export async function POST(req: NextRequest) {
     }
 
     // 从用户输入中提取地区信息，并从聊天历史中推断原始地区
-    const extractedRegion = extractRegionFromPrompt(prompt);
-    let searchCity = city || extractedRegion; // 优先使用传入的city参数，否则使用提取的地区
-    
-    // 如果当前输入没有地区信息，尝试从聊天历史中推断
-    if (!searchCity && chatHistory && chatHistory.length > 0) {
-      // 从历史消息中查找地区信息
-      for (const msg of chatHistory) {
+    // 先尝试AI抽取目的地，失败再回退到规则解析
+    let extractedRegion = await aiInferRegion(prompt);
+    if (!extractedRegion) {
+      extractedRegion = extractRegionFromPrompt(prompt);
+    }
+
+    const scopeCandidates: RegionMatch[] = [];
+
+    if (city) {
+      const providedRegion = (await aiInferRegion(city)) || extractRegionFromPrompt(city) || createRegionMatch(city, inferRegionLevel(city));
+      if (providedRegion) {
+        scopeCandidates.push(providedRegion);
+      }
+    }
+
+    if (extractedRegion) {
+      scopeCandidates.push(extractedRegion);
+    }
+
+    if (chatHistory && chatHistory.length > 0) {
+      for (let i = chatHistory.length - 1; i >= 0; i--) {
+        const msg = chatHistory[i];
         if (msg.type === 'user') {
-          const historicalRegion = extractRegionFromPrompt(msg.content);
+            const historicalRegion = (await aiInferRegion(msg.content)) || extractRegionFromPrompt(msg.content);
           if (historicalRegion) {
-            searchCity = historicalRegion;
-            console.log(`从聊天历史中推断出地区: ${historicalRegion}`);
-            break; // 使用最早出现的地区信息
+            scopeCandidates.push(historicalRegion);
+            if (historicalRegion.level === 'city') {
+              break;
+            }
           }
         }
       }
-      
-      // 从历史AI回复中查找地区信息
-      if (!searchCity) {
-        for (const msg of chatHistory) {
+
+      if (!scopeCandidates.some(scope => scope.level === 'city')) {
+        for (let i = chatHistory.length - 1; i >= 0; i--) {
+          const msg = chatHistory[i];
           if (msg.type === 'ai' && msg.data?.pois && msg.data.pois.length > 0) {
-            // 从第一个POI的城市信息中推断
             const firstPoi = msg.data.pois[0];
             if (firstPoi.city) {
-              searchCity = firstPoi.city;
-              console.log(`从历史POI数据中推断出地区: ${firstPoi.city}`);
-              break;
+              const poiRegion = (await aiInferRegion(firstPoi.city)) || extractRegionFromPrompt(firstPoi.city) || createRegionMatch(firstPoi.city, inferRegionLevel(firstPoi.city));
+              if (poiRegion) {
+                scopeCandidates.push(poiRegion);
+                break;
+              }
             }
           }
         }
       }
     }
 
-    console.log("地区信息:", { 
-      userInput: prompt, 
-      extractedRegion, 
-      providedCity: city, 
-      finalSearchCity: searchCity 
+    const searchScope = pickBestScope(scopeCandidates);
+
+    console.log("地区识别:", {
+      userInput: prompt,
+      extractedRegion,
+      providedCity: city,
+      finalSearchScope: searchScope,
     });
 
-    // 初始化结果
-    let plan: { title: string; description?: string; keywords?: string[] } = { 
+    if (!searchScope) {
+      const { message, suggestions } = buildGeneralClarification();
+      return Response.json({
+        // 不返回标题，避免UI出现多余标题栏
+        description: message,
+        pois: [],
+        requiresLocation: true,
+        suggestions,
+      });
+    }
+
+    if (searchScope.level === 'province') {
+      const { message, suggestions } = buildProvinceClarification(searchScope);
+      return Response.json({
+        description: message,
+        pois: [],
+        requiresLocation: true,
+        suggestions,
+      });
+    }
+
+    const searchCity = searchScope.level === 'city' ? sanitizeCityName(searchScope.name) : searchScope.name;
+    const searchCityDisplay = searchScope.raw || searchScope.name;
+
+let plan: { title: string; description?: string; keywords?: string[] } = { 
       title: "AI旅游规划" 
     };
     let aiError: string | undefined;
@@ -345,8 +677,8 @@ export async function POST(req: NextRequest) {
 - 提供详细完整的规划内容，包括时间安排、交通建议、费用估算、实用贴士等`;
 
       // 如果检测到地区信息，在系统提示中强调
-      if (searchCity) {
-        systemPrompt += `\n\n**重要提示：当前的旅游规划需要严格限定在 ${searchCity} 地区内。所有推荐的景点、餐厅、住宿都必须位于 ${searchCity} 及其周边区域。不要推荐其他城市或地区的景点。**`;
+      if (searchCityDisplay) {
+        systemPrompt += `\n\n**重要提示：当前的旅游规划需要严格限定在 ${searchCityDisplay} 地区内。所有推荐的景点、餐厅、住宿都必须位于 ${searchCityDisplay} 及其周边区域。不要推荐其他城市或地区的景点。**`;
       }
       
       systemPrompt += `
@@ -718,10 +1050,14 @@ export async function POST(req: NextRequest) {
           if (location) {
             console.log(`${bestPoi.name} 坐标来源: location字段`, location);
             const cleanedName = cleanPOIName(bestPoi.name);
+            const normalizedAddress = Array.isArray(bestPoi.address)
+              ? (bestPoi.address.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0).join('、') || undefined)
+              : bestPoi.address;
+
             results.push({
               name: cleanedName,
               city: bestPoi.cityname || searchCity,
-              address: bestPoi.address,
+              address: normalizedAddress,
               lat: location.lat,
               lng: location.lng,
             });

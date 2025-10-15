@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useImperativeHandle, forwardRef } from "react";
 import React from "react";
 
 // 定义类型接口
@@ -11,11 +11,18 @@ interface PoiData {
   lng: number;
 }
 
+interface AISuggestion {
+  label: string;
+  prompt: string;
+}
+
 interface AIResponse {
   title: string;
   description?: string;
   pois: PoiData[];
   error?: string;
+  requiresLocation?: boolean;
+  suggestions?: AISuggestion[];
 }
 
 // Markdown渲染组件 - 简化版
@@ -151,65 +158,77 @@ async function sendRequest(prompt: string, chatHistory?: Array<{ type: 'user' | 
   }
 }
 
-export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }) {
+export type ChatHandle = {
+  clearAll: () => void;
+};
+
+const Chat = forwardRef<ChatHandle, { onMarkers: (m: Array<{ id: string; title: string; latitude: number; longitude: number }>) => void }>(function Chat({ onMarkers }, ref) {
   const [prompt, setPrompt] = useState("");
   const [localData, setLocalData] = useState<AIResponse | null>(null);
   const [chatHistory, setChatHistory] = useState<Array<{ type: 'user' | 'ai'; content: string; data?: AIResponse }>>([]);
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
   const [isMutating, setIsMutating] = useState(false);
 
-  const onSubmit = async () => {
-    if (!prompt.trim() || isMutating) return;
-    
-    const currentPrompt = prompt.trim();
+  const submitPrompt = async (incomingPrompt?: string) => {
+    const finalPrompt = (incomingPrompt ?? prompt).trim();
+    if (!finalPrompt || isMutating) return;
+
+    const userEntry = { type: 'user' as const, content: finalPrompt };
+
     setLocalData(null);
-    
-    // 先保存当前聊天历史，然后添加用户消息
-    const currentChatHistory = [...chatHistory, { type: 'user' as const, content: currentPrompt }];
-    setChatHistory(currentChatHistory);
-    setPrompt(""); // 立即清空输入框
+    setChatHistory(prev => [...prev, userEntry]);
+    setPrompt("");
     setIsMutating(true);
-    
+
     try {
-      const resp = await sendRequest(currentPrompt, chatHistory);
-      
-      if (!resp?.pois || !Array.isArray(resp.pois)) {
-        return;
-      }
-      
-      // 更新本地状态，确保UI重新渲染
+      const resp = await sendRequest(finalPrompt, chatHistory);
+
       setLocalData(resp);
-      
-      // 添加AI回复到聊天记录
+
       const aiContent = resp.description || resp.title;
       setChatHistory(prev => [...prev, { type: 'ai', content: aiContent, data: resp }]);
-      
-      // 只有当返回了新的POI数据时才更新地图标记
+
       if (resp.pois.length > 0) {
         const markers = resp.pois
           .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
-          .map((p, idx) => ({ 
-            id: `${idx}`, 
-            title: p.name, 
-            subtitle: [p.city, p.address].filter(Boolean).join(" · "), 
-            latitude: p.lat as number, 
-            longitude: p.lng as number 
+          .map((p, idx) => ({
+            id: `${idx}`,
+            title: p.name,
+            subtitle: [p.city, p.address].filter(Boolean).join(" · "),
+            latitude: p.lat as number,
+            longitude: p.lng as number
           }));
-        
+
         onMarkers(markers);
       }
-      
+
     } catch (error) {
-      console.error("❌ 请求失败:", error);
+      console.error("发送请求失败:", error);
     } finally {
       setIsMutating(false);
     }
   };
 
+
+  const onSubmit = () => {
+    void submitPrompt();
+  };
+
+  const clearAll = () => {
+    if (isMutating) return;
+    setChatHistory([]);
+    setLocalData(null);
+    setExpandedHistory(new Set());
+    onMarkers([]);
+  };
+
+  useImperativeHandle(ref, () => ({ clearAll }));
+
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      onSubmit();
+      void submitPrompt();
     }
   };
 
@@ -223,6 +242,11 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
       }
       return newSet;
     });
+  };
+
+  const handleSuggestionClick = (suggestion: AISuggestion) => {
+    if (isMutating) return;
+    void submitPrompt(suggestion.prompt);
   };
 
   return (
@@ -294,6 +318,26 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                       )}
                     </div>
                   )}
+
+                  {message.data?.suggestions && message.data.suggestions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50 dark:text-slate-300">
+                        快速建议
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {message.data.suggestions.map((suggestion, suggestionIndex) => (
+                          <button
+                            key={suggestionIndex}
+                            onClick={() => handleSuggestionClick(suggestion)}
+                            disabled={isMutating}
+                            className={`px-3 py-1 text-xs rounded-full border border-base-300/60 dark:border-slate-500/60 bg-base-100/80 dark:bg-slate-600/60 hover:bg-base-200/70 dark:hover:bg-slate-500/60 transition ${isMutating ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -312,6 +356,32 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
                   <MarkdownText content={localData.description} />
                 </div>
               )}
+              {localData?.requiresLocation && (
+                <div className="alert alert-info shadow-sm text-xs sm:text-sm mb-3">
+                  <div>请选择下方一个城市，或告诉我更具体的目的地，我会继续为你安排详细行程。</div>
+                </div>
+              )}
+
+              {localData?.suggestions && localData.suggestions.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-base-content/50 dark:text-slate-300">
+                    快速建议
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {localData.suggestions.map((suggestion, suggestionIndex) => (
+                      <button
+                        key={suggestionIndex}
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        disabled={isMutating}
+                        className={`px-3 py-1.5 text-xs sm:text-sm rounded-full border border-base-300/60 dark:border-slate-500/60 bg-base-100/80 dark:bg-slate-600/60 hover:bg-base-200/70 dark:hover:bg-slate-500/60 transition ${isMutating ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {suggestion.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               
               {localData?.pois?.length ? (
                 <div className="space-y-2">
@@ -489,6 +559,7 @@ export default function Chat({ onMarkers }: { onMarkers: (m: Array<{ id: string;
       </div>
     </div>
   );
-}
+});
 
+export default Chat;
 

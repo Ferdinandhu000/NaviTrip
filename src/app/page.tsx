@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import Chat from "@/components/Chat";
+import Chat, { ChatHandle } from "@/components/Chat";
 import ThemeController from "@/components/ThemeController";
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 
@@ -10,6 +10,7 @@ const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 export default function Home() {
   const [markers, setMarkers] = useState<Array<{ id: string; title: string; subtitle?: string; latitude: number; longitude: number }>>([]);
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const chatRef = useRef<ChatHandle | null>(null);
 
   // 统一使用标准地图样式
   const mapStyleId = "amap://styles/normal";
@@ -43,6 +44,17 @@ export default function Home() {
         </div>
         <div className="navbar-end relative z-10 pr-6">
           <div className="flex items-center gap-3">
+            {/* 清空按钮移到顶栏 */}
+            <button
+              onClick={() => {
+                if (!chatRef.current) return;
+                const modal = document.getElementById('clear-modal') as HTMLDialogElement | null;
+                modal?.showModal?.();
+              }}
+              className="btn btn-sm normal-case rounded-xl border border-purple-200/30 dark:border-purple-700/30 bg-gradient-to-r from-purple-500/10 to-purple-600/10 text-purple-700 dark:text-purple-300 hover:from-purple-500/20 hover:to-purple-600/20 hover:border-purple-300/40 dark:hover:border-purple-600/40"
+            >
+              清空聊天
+            </button>
             <ThemeController />
           </div>
         </div>
@@ -89,11 +101,38 @@ export default function Home() {
                 </button>
               </div>
 
-              <Chat onMarkers={setMarkers} />
+              <Chat ref={chatRef} onMarkers={setMarkers} />
             </div>
           </div>
         </section>
       </main>
+
+      {/* 清空确认对话框：居中圆角+背景模糊 */}
+      <dialog id="clear-modal" className="modal z-50">
+        {/* 额外的全屏模糊遮罩，确保右侧也被覆盖 */}
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm"></div>
+        <div className="modal-box rounded-2xl bg-base-100/95 shadow-2xl">
+          <h3 className="font-bold text-lg">删除聊天？</h3>
+          <p className="py-2 text-sm opacity-80">这会清空当前会话中的所有消息与地图标记。</p>
+          <div className="modal-action">
+            <form method="dialog" className="flex gap-2">
+              <button className="btn btn-ghost rounded-xl">取消</button>
+              <button
+                className="btn btn-error rounded-xl"
+                onClick={() => {
+                  chatRef.current?.clearAll();
+                }}
+              >
+                删除
+              </button>
+            </form>
+          </div>
+        </div>
+        {/* 点击遮罩关闭 */}
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
       
       {/* 折叠后的展开按钮 - 固定在右侧边缘 */}
       {!isChatOpen && (

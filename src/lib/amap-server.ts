@@ -6,7 +6,8 @@ import { z } from "zod";
 const PoiSchema = z.object({
   id: z.string().optional(),
   name: z.string(),
-  address: z.string().optional(),
+  // 高德偶尔返回 address 为数组，这里做联合类型兼容
+  address: z.union([z.string(), z.array(z.string())]).optional(),
   location: z.string().optional(), // "lng,lat" 格式
   cityname: z.string().optional(),
   typecode: z.string().optional(),
