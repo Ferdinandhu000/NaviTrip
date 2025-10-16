@@ -289,6 +289,34 @@ body {
   transform: scale(0.95);
 }
 
+.clear-chat-btn {
+  box-shadow: 0 12px 26px -18px rgba(124, 58, 237, 0.45);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.clear-chat-btn:hover {
+  box-shadow: 0 18px 34px -18px rgba(124, 58, 237, 0.55);
+}
+
+.clear-chat-btn:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.55);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8), 0 16px 30px -18px rgba(124, 58, 237, 0.55);
+}
+
+[data-theme="dark"] .clear-chat-btn {
+  box-shadow: 0 12px 26px -18px rgba(192, 132, 252, 0.4);
+}
+
+[data-theme="dark"] .clear-chat-btn:hover {
+  box-shadow: 0 18px 34px -18px rgba(192, 132, 252, 0.55);
+}
+
+[data-theme="dark"] .clear-chat-btn:focus-visible {
+  outline-color: rgba(196, 181, 253, 0.55);
+  box-shadow: 0 0 0 2px rgba(30, 41, 59, 0.85), 0 16px 30px -18px rgba(192, 132, 252, 0.55);
+}
+
 .theme-icon {
   font-size: 18px;
   line-height: 1;

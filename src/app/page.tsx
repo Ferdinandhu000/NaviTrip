@@ -46,14 +46,46 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {/* 清空按钮移到顶栏 */}
             <button
+              type="button"
               onClick={() => {
                 if (!chatRef.current) return;
                 const modal = document.getElementById('clear-modal') as HTMLDialogElement | null;
                 modal?.showModal?.();
               }}
-              className="btn btn-sm normal-case rounded-xl border border-purple-200/30 dark:border-purple-700/30 bg-gradient-to-r from-purple-500/10 to-purple-600/10 text-purple-700 dark:text-purple-300 hover:from-purple-500/20 hover:to-purple-600/20 hover:border-purple-300/40 dark:hover:border-purple-600/40"
+              className="relative group theme-toggle-btn clear-chat-btn overflow-hidden"
+              title="清空聊天"
+              aria-label="清空聊天"
             >
-              清空聊天
+              <span className="sr-only">清空聊天</span>
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full"></div>
+              <div className="relative z-10 flex items-center justify-center w-full h-full">
+                <svg
+                  className="w-5 h-5 text-purple-600 dark:text-purple-200 transition-transform duration-300 group-hover:-translate-y-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                    d="M9 4h6a1 1 0 011 1v2H8V5a1 1 0 011-1z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                    d="M5 7h14l-1.05 11.15A2 2 0 0115 20H9a2 2 0 01-1.95-1.85L6 7"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                    d="M10 11v5m4-5v5"
+                  />
+                </svg>
+              </div>
+              <div className="absolute inset-0 rounded-full bg-purple-500/15 scale-0 group-active:scale-100 transition-transform duration-200"></div>
             </button>
             <ThemeController />
           </div>

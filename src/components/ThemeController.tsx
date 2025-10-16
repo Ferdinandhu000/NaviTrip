@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 
 export default function ThemeController() {
@@ -6,13 +6,11 @@ export default function ThemeController() {
   const [isChanging, setIsChanging] = useState(false);
 
   useEffect(() => {
-    // 从 localStorage 读取保存的主题，优先使用系统偏好
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const savedTheme = localStorage.getItem("theme") || systemTheme;
     setCurrentTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
 
-    // 监听系统主题变化
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemThemeChange = (e: MediaQueryListEvent) => {
       if (!localStorage.getItem("theme")) {
@@ -28,15 +26,11 @@ export default function ThemeController() {
 
   const changeTheme = async (themeName: string) => {
     setIsChanging(true);
-    
-    // 添加切换动画效果
     document.documentElement.style.transition = 'all 0.3s ease-in-out';
-    
     setTimeout(() => {
       setCurrentTheme(themeName);
       document.documentElement.setAttribute("data-theme", themeName);
       localStorage.setItem("theme", themeName);
-      
       setTimeout(() => {
         setIsChanging(false);
         document.documentElement.style.transition = '';
@@ -44,22 +38,22 @@ export default function ThemeController() {
     }, 150);
   };
 
+  const label = currentTheme === 'light' ? '深色主题' : '浅色主题';
+
   return (
     <div className="theme-controller-wrapper">
       <button
         onClick={() => changeTheme(currentTheme === "light" ? "dark" : "light")}
         className="theme-toggle-btn group relative overflow-hidden"
-        title={`切换到${currentTheme === "light" ? "深色" : "浅色"}模式`}
+        aria-label={label}
+        title={label}
         disabled={isChanging}
       >
-        {/* 背景装饰 */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full"></div>
-        
-        {/* 图标容器 */}
         <div className="relative z-10 flex items-center justify-center w-full h-full">
           <div className={`theme-icon transition-all duration-300 ${isChanging ? 'scale-0 rotate-180' : 'scale-100 rotate-0'}`}>
             {currentTheme === "light" ? (
-              <svg className="w-5 h-5 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-purple-600 dark:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
               </svg>
             ) : (
@@ -69,8 +63,6 @@ export default function ThemeController() {
             )}
           </div>
         </div>
-        
-        {/* 涟漪效果 */}
         <div className="absolute inset-0 rounded-full bg-primary/20 scale-0 group-active:scale-100 transition-transform duration-200"></div>
       </button>
     </div>
