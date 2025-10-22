@@ -1,21 +1,15 @@
 # NaviTrip 🗺️ - AI旅游规划平台
 
-
-
-
 **🚀 智能旅游规划解决方案** - 基于最新AI技术和专业地图服务，为用户提供前所未有的旅游体验
 
-> ⭐ **为什么选择NaviTrip？** - 三大核心优势：**AI驱动的智能规划**、**专业级地图可视化**、**极致的用户体验**
+> ⭐ **为什么选择NaviTrip？** - 三大核心优势：**AI驱动的智能规划**、**专业级地图可视化**、**极致的用户体验**  
+
+> 示例网站: [https://navitrip.netlify.app/](https://navitrip.netlify.app/)
 
 ![Next.js](https://img.shields.io/badge/Next.js-15.4-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19.1-blue?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0-06B6D4?logo=tailwindcss)
-
-## 参赛说明
-本作品为大连理工大学第一届Vibe Coding Hackathon“灵码杯”参赛作品   
-参赛队伍：**Team Spirit**  
-所选赛道：**赛题三 - 智享生活**
 
 ## ✨ 核心优势 - 为什么选择NaviTrip
 
